@@ -328,9 +328,21 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
         try {
             payload = JSON.parse(rawBody);
         } catch (parseError) {
-            const error = new Error('Unable to parse Yahoo Finance response.');
-            error.cause = parseError;
-            throw error;
+            // Try to salvage JSON if proxy wrapped response or added noise
+            const jsonMatch = rawBody.match(/\{[\s\S]*"quoteResponse"[\s\S]*\}/);
+            if (jsonMatch) {
+                try {
+                    payload = JSON.parse(jsonMatch[0]);
+                } catch (nestedError) {
+                    const error = new Error(`Unable to parse Yahoo Finance response. Snippet: ${rawBody.slice(0, 200)}`);
+                    error.cause = nestedError;
+                    throw error;
+                }
+            } else {
+                const error = new Error(`Unable to parse Yahoo Finance response. Snippet: ${rawBody.slice(0, 200)}`);
+                error.cause = parseError;
+                throw error;
+            }
         }
 
         const results = payload && payload.quoteResponse && Array.isArray(payload.quoteResponse.result)
