@@ -64,19 +64,29 @@ function buildUrlWithProxy(originalUrl, proxyUrl) {
 function getYahooProxyList() {
     const configuredList = getWindowConfig('DESERT_EXCHANGE_YAHOO_PROXIES', null);
     if (Array.isArray(configuredList) && configuredList.length > 0) {
-        return configuredList.filter(Boolean);
+        const cleaned = configuredList
+            .map(proxy => proxy === 'direct' ? null : proxy)
+            .filter((proxy, index, array) => array.indexOf(proxy) === index);
+        if (!cleaned.includes(null)) {
+            cleaned.push(null); // last attempt: direct request
+        }
+        return cleaned;
     }
     const primaryProxy = getWindowConfig('DESERT_EXCHANGE_YAHOO_PROXY', null);
     const defaults = [
         primaryProxy,
         'https://thingproxy.freeboard.io/fetch/',
         'https://api.allorigins.win/raw?url=',
-        DEFAULT_YAHOO_FINANCE_PROXY
+        DEFAULT_YAHOO_FINANCE_PROXY,
+        null // final fallback: direct fetch
     ];
     const unique = [];
     defaults.forEach(proxy => {
         if (proxy && !unique.includes(proxy)) {
             unique.push(proxy);
+        }
+        if (proxy === null && !unique.includes(null)) {
+            unique.push(null);
         }
     });
     return unique;
@@ -316,19 +326,35 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
 
     const symbolList = Object.values(YAHOO_FINANCE_METAL_SYMBOLS);
     const proxyList = getYahooProxyList();
+    const maxIndex = Math.max(proxyList.length - 1, 0);
+    let currentProxyIndex = Math.min(Math.max(proxyIndex, 0), maxIndex);
     let proxyToUse = null;
 
     if (typeof useProxyOverride === 'string') {
         proxyToUse = useProxyOverride;
-    } else if (useProxyOverride === true) {
-        proxyToUse = proxyList[useProxyOverride === true ? proxyIndex : 0] || proxyList[0] || null;
-    } else if (shouldUseYahooProxyByDefault()) {
-        proxyToUse = proxyList[proxyIndex] || proxyList[0] || null;
+        const directIndex = proxyList.findIndex(proxy => proxy === proxyToUse);
+        if (directIndex >= 0) {
+            currentProxyIndex = directIndex;
+        }
+    } else if (useProxyOverride === true || shouldUseYahooProxyByDefault()) {
+        proxyToUse = proxyList[currentProxyIndex] ?? null;
+    } else {
+        proxyToUse = null;
+        const nullIndex = proxyList.findIndex(proxy => proxy === null);
+        if (nullIndex >= 0) {
+            currentProxyIndex = nullIndex;
+        } else {
+            currentProxyIndex = -1;
+        }
+    }
+
+    if (proxyToUse === undefined) {
+        proxyToUse = null;
     }
 
     const requestUrl = buildYahooFinanceUrl(symbolList, { useProxy: proxyToUse !== null ? proxyToUse : undefined });
     const corsAnywhereToken = getWindowConfig('DESERT_EXCHANGE_CORS_ANYWHERE_TOKEN', null);
-    const activeProxyIndex = proxyToUse !== null ? proxyList.findIndex(proxy => proxy === proxyToUse) : -1;
+    const activeProxyIndex = proxyList.findIndex(proxy => proxy === proxyToUse);
 
     toggleRefreshButtonLoading(true);
     preciousMetalFetchInFlight = true;
@@ -352,7 +378,7 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
         if (!response.ok) {
             const error = new Error(`Yahoo Finance request failed with status ${response.status}`);
             error.status = response.status;
-            error.useProxy = resolvedUseProxy;
+            error.useProxy = proxyToUse;
             throw error;
         }
 
@@ -421,7 +447,7 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
             return fetchPreciousMetalPrices({ force, useProxyOverride: true, proxyIndex: 0 });
         }
         if ((error.name === 'TypeError' || (typeof error.status === 'number' && error.status >= 400)) && proxyToUse !== null) {
-            const nextIndex = activeProxyIndex + 1;
+            const nextIndex = (activeProxyIndex >= 0 ? activeProxyIndex : currentProxyIndex) + 1;
             if (nextIndex < proxyList.length) {
                 console.warn(`Proxy failed (${proxyToUse}). Trying next proxy: ${proxyList[nextIndex]}`);
                 return fetchPreciousMetalPrices({ force, useProxyOverride: true, proxyIndex: nextIndex });
@@ -430,7 +456,13 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
         if (proxyToUse && corsAnywhereToken === null && /cors-anywhere/i.test(requestUrl)) {
             error.message = `${error.message}. cors-anywhere requires a token; set window.DESERT_EXCHANGE_CORS_ANYWHERE_TOKEN to a valid key or use a different proxy.`;
         }
-        renderLiveMetalPrices(error);
+        const exhausted =
+            proxyToUse !== null &&
+            (activeProxyIndex === -1 || activeProxyIndex >= proxyList.length - 1);
+        const finalError = exhausted
+            ? new Error('All Yahoo Finance proxy endpoints failed. Try again later or configure window.DESERT_EXCHANGE_YAHOO_PROXIES with a working proxy URL.')
+            : error;
+        renderLiveMetalPrices(finalError);
     } finally {
         preciousMetalFetchInFlight = false;
         toggleRefreshButtonLoading(false);
