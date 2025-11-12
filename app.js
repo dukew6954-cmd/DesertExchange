@@ -3169,6 +3169,14 @@ function setupEventListeners() {
     if (addItemForm) {
         addItemForm.addEventListener('submit', addItemToBuySheet);
     }
+    const buySheetModalCancel = document.getElementById('buy-sheet-modal-cancel');
+    if (buySheetModalCancel) {
+        buySheetModalCancel.addEventListener('click', closeModals);
+    }
+    const buySheetModalClose = document.getElementById('buy-sheet-modal-close');
+    if (buySheetModalClose) {
+        buySheetModalClose.addEventListener('click', closeModals);
+    }
 
     // Event Management
     const newEventBtn = document.getElementById('new-event-btn');

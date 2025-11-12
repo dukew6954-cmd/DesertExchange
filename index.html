@@ -597,7 +597,7 @@
                                 <h2 id="buy-sheet-modal-title">New Item</h2>
                                 <p id="buy-sheet-modal-subtitle" class="modal-subtitle">Configure the item details.</p>
                             </div>
-                            <button class="modal-close" id="buy-sheet-modal-close">&times;</button>
+                            <button class="modal-close" id="buy-sheet-modal-close" type="button">&times;</button>
                         </div>
                         <div class="modal-body buy-sheet-modal-body">
                             <div id="drawer-section-metal" class="drawer-section">
@@ -742,12 +742,47 @@
                             <h4>Item Notes</h4>
                             <textarea id="drawer-item-notes" class="form-control" rows="3" placeholder="Additional details"></textarea>
                         </div>
+                        <div id="drawer-section-quick" class="drawer-section">
+                            <h4>Quick Add Item</h4>
+                            <p class="section-description">Use this simplified form to add items directly to the buy sheet.</p>
+                            <form id="add-item-to-sheet-form" class="simple-buy-sheet-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="sheet-item-category">Category *</label>
+                                        <select id="sheet-item-category" class="form-control" required>
+                                            <option value="">-- Select Category --</option>
+                                            <option value="Gold Jewelry">Gold Jewelry</option>
+                                            <option value="Silver Jewelry">Silver Jewelry</option>
+                                            <option value="Platinum">Platinum</option>
+                                            <option value="Palladium">Palladium</option>
+                                            <option value="Watches">Watches</option>
+                                            <option value="Coins">Coins</option>
+                                            <option value="Electronics">Electronics</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="sheet-item-quantity">Quantity</label>
+                                        <input type="number" id="sheet-item-quantity" class="form-control" min="1" step="1" value="1">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sheet-item-description">Description *</label>
+                                    <input type="text" id="sheet-item-description" class="form-control" placeholder="Item description" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sheet-item-offer">Offer Amount *</label>
+                                    <input type="number" id="sheet-item-offer" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                                </div>
+                                <p class="form-help">The offer amount you enter will be used directly; melt and profit values for non-metal items are calculated as zero.</p>
+                            </form>
+                        </div>
                     </div>
                         <div class="modal-footer buy-sheet-modal-footer">
                             <button id="buy-sheet-modal-delete" class="btn-secondary danger hidden">Delete Item</button>
                             <div class="modal-actions">
-                                <button id="buy-sheet-modal-cancel" class="btn-secondary">Cancel</button>
-                                <button id="buy-sheet-modal-save" class="btn-primary">Save Item</button>
+                                <button id="buy-sheet-modal-cancel" class="btn-secondary" type="button">Cancel</button>
+                                <button id="buy-sheet-modal-save" class="btn-primary" type="submit" form="add-item-to-sheet-form">Save Item</button>
                             </div>
                         </div>
                     </div>
