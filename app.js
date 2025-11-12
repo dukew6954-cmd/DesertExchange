@@ -286,18 +286,27 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
         ? useProxyOverride
         : shouldUseYahooProxyByDefault();
     const requestUrl = buildYahooFinanceUrl(symbolList, { useProxy: resolvedUseProxy });
+    const corsAnywhereToken = getWindowConfig('DESERT_EXCHANGE_CORS_ANYWHERE_TOKEN', null);
 
     toggleRefreshButtonLoading(true);
     preciousMetalFetchInFlight = true;
 
     try {
-        const response = await fetch(requestUrl, {
+        const headers = {
+            accept: 'application/json, text/plain, */*'
+        };
+
+        if (resolvedUseProxy && corsAnywhereToken && /cors-anywhere/i.test(requestUrl)) {
+            headers['X-Cors-Api-Key'] = corsAnywhereToken;
+        }
+
+        const fetchOptions = {
             cache: 'no-store',
             mode: 'cors',
-            headers: {
-                accept: 'application/json, text/plain, */*'
-            }
-        });
+            headers
+        };
+
+        const response = await fetch(requestUrl, fetchOptions);
         if (!response.ok) {
             const error = new Error(`Yahoo Finance request failed with status ${response.status}`);
             error.status = response.status;
@@ -356,6 +365,9 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
         if (resolvedUseProxy !== true && shouldFallbackToProxy(error)) {
             console.warn('Retrying precious metal price fetch through Yahoo Finance proxy.');
             return fetchPreciousMetalPrices({ force, useProxyOverride: true });
+        }
+        if (resolvedUseProxy === true && corsAnywhereToken === null && /cors-anywhere/i.test(requestUrl)) {
+            error.message = `${error.message}. cors-anywhere requires a token; set window.DESERT_EXCHANGE_CORS_ANYWHERE_TOKEN to a valid key or use a different proxy.`;
         }
         renderLiveMetalPrices(error);
     } finally {
