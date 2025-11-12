@@ -191,7 +191,6 @@ async function handleOnline() {
     isOnline = true;
     updateOfflineStatus();
     await syncPendingChanges();
-    await fetchPreciousMetalPrices({ force: true });
 }
 
 // Handle going offline
@@ -3077,27 +3076,22 @@ function setupEventListeners() {
     document.getElementById('calc-clear-btn').addEventListener('click', clearCalculator);
     const refreshPricesBtn = document.getElementById('refresh-prices-btn');
     if (refreshPricesBtn) {
-        refreshPricesBtn.style.display = '';
-        if (!refreshPricesBtn.dataset.bound) {
-            refreshPricesBtn.addEventListener('click', () => {
-                fetchPreciousMetalPrices({ force: true });
-            });
-            refreshPricesBtn.dataset.bound = 'true';
-        }
+        refreshPricesBtn.style.display = 'none';
     }
     const livePricesDisplay = document.getElementById('live-prices-display');
     if (livePricesDisplay) {
-        livePricesDisplay.style.display = 'none';
+        livePricesDisplay.style.display = 'block';
+        livePricesDisplay.innerHTML = `
+            <div class="metal-prices-empty">
+                Enter the current market price manually in the calculator.
+            </div>
+        `;
     }
-    fetchPreciousMetalPrices().catch(error => {
-        console.error('Initial precious metal price load failed:', error);
-    });
     
     // Auto-update calculator when metal type changes
     const calcMetalSelect = document.getElementById('calc-metal');
     if (calcMetalSelect) {
         calcMetalSelect.addEventListener('change', () => {
-            updateCalculatorMarketPrice({ triggerRecalculate: false, force: true });
             if (shouldAutoCalculate()) {
                 calculateMetal();
             }
