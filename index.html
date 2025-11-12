@@ -1,0 +1,2168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Buying Event Management</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDIMPxM58NLfUnIUvsHDXFxQGYS6Tx2_XQ&libraries=places&callback=initGoogleMaps" async defer></script>
+</head>
+<body>
+    <!-- Loading Screen (shown while checking auth) -->
+    <div id="auth-loading" class="auth-loading" style="display: flex;">
+        <div class="auth-loading-content">
+            <div class="auth-loading-spinner"></div>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Authentication Modal (hidden until needed) -->
+    <div id="auth-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-content-small">
+            <div class="modal-header">
+                <h2 id="auth-title">Login</h2>
+            </div>
+            <div class="modal-body">
+                <div id="auth-error" class="error-message" style="display: none;"></div>
+                
+                <!-- Login Form -->
+                <form id="login-form" style="display: block;">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Login</button>
+                        <button type="button" class="btn-secondary" onclick="showSignup()">Sign Up</button>
+                    </div>
+                </form>
+                
+                <!-- Signup Form -->
+                <form id="signup-form" style="display: none;">
+                    <div class="form-group">
+                        <label for="signup-email">Email</label>
+                        <input type="email" id="signup-email" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <input type="password" id="signup-password" class="form-control" required minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-name">Full Name</label>
+                        <input type="text" id="signup-name" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Sign Up</button>
+                        <button type="button" class="btn-secondary" onclick="showLogin()">Back to Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main App (hidden until authenticated) -->
+    <div id="main-app" style="display: none;">
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>Gold Buying Event Management</h1>
+            <div class="event-selector-container">
+                <label for="event-selector">Event:</label>
+                <select id="event-selector">
+                    <option value="">Select Event</option>
+                </select>
+                <!-- Offline Status Indicator -->
+                <div id="offline-status" class="offline-status" style="display: none;">
+                    <span id="offline-indicator" class="offline-indicator offline" title="Offline Mode - Changes will sync when connection is restored"></span>
+                    <span id="sync-pending-count" class="sync-pending-count" style="display: none;">0</span>
+                </div>
+                <button id="logout-btn" class="btn-secondary" onclick="handleLogout()" title="Logout" style="margin-left: auto;">
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+        
+        <!-- Operations Dropdown -->
+        <div class="nav-dropdown">
+            <button class="tab-btn dropdown-toggle" data-dropdown="operations" onclick="window.toggleDropdown('operations', event); return false;">
+                Operations
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div class="dropdown-menu" id="operations-dropdown">
+                <button class="dropdown-item" data-tab="calculator" onclick="window.selectDropdownTab('calculator', event); return false;">Calculator</button>
+                <button class="dropdown-item" data-tab="buy-sheet" onclick="window.selectDropdownTab('buy-sheet', event); return false;">Buy Sheet</button>
+                <button class="dropdown-item" data-tab="buy-list" onclick="window.selectDropdownTab('buy-list', event); return false;">Buy List</button>
+            </div>
+        </div>
+        
+        <!-- Financial Dropdown -->
+        <div class="nav-dropdown">
+            <button class="tab-btn dropdown-toggle" data-dropdown="financial" onclick="window.toggleDropdown('financial', event); return false;">
+                Financial
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div class="dropdown-menu" id="financial-dropdown">
+                <button class="dropdown-item" data-tab="sales" onclick="window.selectDropdownTab('sales', event); return false;">Sales</button>
+                <button class="dropdown-item" data-tab="expenses" onclick="window.selectDropdownTab('expenses', event); return false;">Expenses</button>
+                <button class="dropdown-item" data-tab="reports" onclick="window.selectDropdownTab('reports', event); return false;">Reports</button>
+            </div>
+        </div>
+        
+        <!-- Management Dropdown -->
+        <div class="nav-dropdown">
+            <button class="tab-btn dropdown-toggle" data-dropdown="management" onclick="window.toggleDropdown('management', event); return false;">
+                Management
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div class="dropdown-menu" id="management-dropdown">
+                <button class="dropdown-item" data-tab="crm-management" onclick="window.selectDropdownTab('crm-management', event); return false;">Customer CRM</button>
+                <button class="dropdown-item" data-tab="event-planning" onclick="window.selectDropdownTab('event-planning', event); return false;">Event Planning</button>
+                <button class="dropdown-item" data-tab="appointments" onclick="window.selectDropdownTab('appointments', event); return false;">Appointments</button>
+            </div>
+        </div>
+        
+        <button class="tab-btn" data-tab="settings">Settings</button>
+    </div>
+
+    <main class="main-content">
+        <!-- Dashboard Tab -->
+        <section id="dashboard" class="tab-content active">
+            <div class="section-header">
+                <h2>Dashboard</h2>
+            </div>
+
+            <!-- Welcome Message -->
+            <div id="dashboard-welcome" class="dashboard-welcome">
+                <div class="welcome-content">
+                    <div class="welcome-avatar">
+                        <img id="welcome-avatar-img" src="" alt="Profile" style="display: none;">
+                        <div id="welcome-avatar-placeholder" class="avatar-placeholder"></div>
+                    </div>
+                    <div class="welcome-text">
+                        <h3 id="welcome-message">Welcome Back!</h3>
+                        <p id="welcome-subtitle">Here's your event overview</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-header">
+                <h3>Event Statistics</h3>
+                <div class="filter-controls">
+                    <button class="filter-btn active" data-filter="all">All Time</button>
+                    <button class="filter-btn" data-filter="today">Today</button>
+                    <button class="filter-btn" data-filter="week">This Week</button>
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Customers</div>
+                    <div class="stat-value" id="stat-customers">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Items</div>
+                    <div class="stat-value" id="stat-items">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Melt Value</div>
+                    <div class="stat-value" id="stat-melt">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Offer</div>
+                    <div class="stat-value" id="stat-offer">$0.00</div>
+                </div>
+            </div>
+
+            <div class="dashboard-overview">
+                <h3>Overview (All Events Combined)</h3>
+                <div class="overview-grid">
+                    <div class="overview-card">
+                        <div class="overview-label">Profit This Month</div>
+                        <div class="overview-value" id="overview-monthly-profit">$0.00</div>
+                        <div class="overview-subtitle" id="overview-monthly-profit-count">0 sales</div>
+                    </div>
+                    <div class="overview-card">
+                        <div class="overview-label">Total Buy Sheets</div>
+                        <div class="overview-value" id="overview-buy-sheets">0</div>
+                        <div class="overview-subtitle" id="overview-confirmed-sheets">0 confirmed</div>
+                    </div>
+                    <div class="overview-card">
+                        <div class="overview-label">Total Sales</div>
+                        <div class="overview-value" id="overview-total-sales">0</div>
+                        <div class="overview-subtitle" id="overview-sales-revenue">$0.00 revenue</div>
+                    </div>
+                    <div class="overview-card">
+                        <div class="overview-label">Total Expenses</div>
+                        <div class="overview-value" id="overview-total-expenses">0</div>
+                        <div class="overview-subtitle" id="overview-expenses-amount">$0.00 spent</div>
+                    </div>
+                </div>
+                
+                <div class="best-sellers-section">
+                    <h3>Best-Selling Categories</h3>
+                    <div id="best-sellers-list" class="best-sellers-list">
+                        <div class="empty-message">No sales yet</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Appointments Tab -->
+        <section id="appointments" class="tab-content">
+            <div class="section-header">
+                <h2>Appointments & House Calls</h2>
+                <button id="refresh-appointments-btn" class="btn-primary">Refresh</button>
+            </div>
+            
+            <!-- Create Appointment Button -->
+            <div class="appointments-actions" style="margin-bottom: 1.5rem;">
+                <button id="create-appointment-btn" class="btn-primary">Create Appointment</button>
+            </div>
+            
+            <!-- Appointments Calendar Section -->
+            <div class="appointments-container">
+                <div class="calendar-header">
+                    <div class="calendar-navigation">
+                        <button id="calendar-prev-month" class="btn-icon-calendar">‹</button>
+                        <h3 id="calendar-month-year"></h3>
+                        <button id="calendar-next-month" class="btn-icon-calendar">›</button>
+                    </div>
+                    <div class="calendar-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="today">Today</button>
+                        <button class="filter-btn" data-filter="week">This Week</button>
+                        <button class="filter-btn" data-filter="month">This Month</button>
+                    </div>
+                </div>
+                
+                <div id="appointments-loading" class="loading-message" style="display: none;">
+                    <p>Loading appointments...</p>
+                </div>
+                
+                <div id="appointments-error" class="error-message" style="display: none;">
+                    <p id="appointments-error-text"></p>
+                </div>
+                
+                <div id="appointments-calendar" class="appointments-calendar">
+                    <div class="empty-message">Click "Refresh" to load appointments from Calendly.</div>
+                </div>
+                
+                <!-- Day Details Modal -->
+                <div id="day-details-modal" class="modal">
+                    <div class="modal-content modal-content-medium">
+                        <span class="close" onclick="closeDayDetailsModal()">&times;</span>
+                        <div class="modal-header">
+                            <h2 id="day-details-title">Appointments</h2>
+                        </div>
+                        <div class="modal-body">
+                            <div id="day-details-content" class="day-details-content">
+                                <!-- Appointment details will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Route Planner Section -->
+            <div class="route-planner-section">
+                <div class="section-header">
+                    <h2>Route Planner</h2>
+                    <p class="section-subtitle">Plan and optimize routes for multiple house call stops</p>
+                </div>
+                
+                <div class="route-planner-container">
+                    <!-- Stops List -->
+                    <div class="stops-list-section">
+                        <div class="section-header">
+                            <h3>Stops (<span id="stops-count">0</span>)</h3>
+                            <div class="route-actions">
+                                <button id="optimize-route-btn" class="btn-primary" disabled>Optimize Route</button>
+                                <button id="clear-all-btn" class="btn-secondary">Clear All</button>
+                            </div>
+                        </div>
+                        <div id="stops-list" class="stops-list">
+                            <div class="empty-message">No stops added yet. Add addresses above to start planning your route.</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Map Container -->
+                    <div class="map-section">
+                        <h3>Route Map</h3>
+                        <div id="route-map" class="route-map"></div>
+                    </div>
+                    
+                    <!-- Today's Appointments Section -->
+                    <div class="today-appointments-section">
+                        <div class="section-header">
+                            <h3>Today's Appointments</h3>
+                        </div>
+                        <div id="today-appointments-list" class="today-appointments-list">
+                            <div class="empty-message">No appointments scheduled for today.</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Route Summary -->
+                    <div id="route-summary" class="route-summary" style="display: none;">
+                        <h3>Route Summary</h3>
+                        <div class="summary-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Total Distance</span>
+                                <span class="stat-value" id="total-distance">-</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Estimated Time</span>
+                                <span class="stat-value" id="total-time">-</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Number of Stops</span>
+                                <span class="stat-value" id="summary-stops-count">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Calculator Tab -->
+        <section id="calculator" class="tab-content">
+            <div class="section-header">
+                <h2>Precious Metal Calculator</h2>
+                <button id="refresh-prices-btn" class="btn-secondary">Refresh Prices</button>
+            </div>
+            
+            <!-- Live Prices Display -->
+            <div id="live-prices-display" class="live-prices-container">
+                <div class="live-prices-header">
+                    <h3>Live Market Prices</h3>
+                    <span id="prices-last-updated" class="prices-updated-time"></span>
+                </div>
+                <div class="live-prices-grid">
+                    <div class="price-card">
+                        <div class="price-label">Gold (per oz)</div>
+                        <div class="price-value" id="live-gold-price">-</div>
+                    </div>
+                    <div class="price-card">
+                        <div class="price-label">Silver (per oz)</div>
+                        <div class="price-value" id="live-silver-price">-</div>
+                    </div>
+                    <div class="price-card">
+                        <div class="price-label">Platinum (per oz)</div>
+                        <div class="price-value" id="live-platinum-price">-</div>
+                    </div>
+                    <div class="price-card">
+                        <div class="price-label">Palladium (per oz)</div>
+                        <div class="price-value" id="live-palladium-price">-</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="calculator-container">
+                <div class="calculator-inputs">
+                    <form id="calculator-form" class="calculator-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="calc-metal">Metal Type</label>
+                                <select id="calc-metal" class="form-control" required>
+                                    <option value="">-- Select Metal --</option>
+                                    <option value="Gold">Gold</option>
+                                    <option value="Silver">Silver</option>
+                                    <option value="Platinum">Platinum</option>
+                                    <option value="Palladium">Palladium</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="calc-karat">Karat / Purity</label>
+                                <select id="calc-karat" class="form-control" required>
+                                    <option value="">-- Select Karat --</option>
+                                    <option value="24">24K (100%)</option>
+                                    <option value="22">22K (91.7%)</option>
+                                    <option value="18">18K (75%)</option>
+                                    <option value="14">14K (58.3%)</option>
+                                    <option value="10">10K (41.7%)</option>
+                                    <option value="925">925 Sterling (92.5%)</option>
+                                    <option value="900">900 (90%)</option>
+                                    <option value="800">800 (80%)</option>
+                                    <option value="1">100% Pure</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="calc-weight">Weight (grams)</label>
+                                <input type="number" id="calc-weight" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="calc-market-price">Market Price per Ounce</label>
+                                <input type="number" id="calc-market-price" class="form-control" step="0.01" min="0" placeholder="0.00" required readonly tabindex="-1">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-offer-pct">Offer Percentage: <span id="calc-offer-pct-display">85%</span></label>
+                            <div class="offer-pct-controls">
+                                <input type="range" id="calc-offer-pct" class="form-control slider" min="0" max="100" step="1" value="85" required>
+                                <div class="slider-labels">
+                                    <span>0%</span>
+                                    <span>50%</span>
+                                    <span>100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-date">Date Purchased</label>
+                            <input type="date" id="calc-date" class="form-control" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="calc-calculate-btn" class="btn-primary">Calculate</button>
+                            <button type="button" id="calc-clear-btn" class="btn-secondary">Clear</button>
+                            <button type="button" id="calc-send-btn" class="btn-secondary" disabled>Send to Buy Sheet</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="calculator-results">
+                    <div class="calc-results-card">
+                        <h3>Calculation Results</h3>
+                        <div class="calc-breakdown">
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">Purity:</span>
+                                <span class="breakdown-value" id="calc-purity">-</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">Pure Metal Weight:</span>
+                                <span class="breakdown-value" id="calc-pure-weight">-</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">Recoverable Weight (96%):</span>
+                                <span class="breakdown-value" id="calc-recoverable-weight">-</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">Price per Gram:</span>
+                                <span class="breakdown-value" id="calc-price-per-gram">-</span>
+                            </div>
+                        </div>
+                        <div class="calc-results-main">
+                            <div class="result-card">
+                                <div class="result-label">Full Melt Value</div>
+                                <div class="result-value" id="calc-melt">$0.00</div>
+                            </div>
+                            <div class="result-card highlight">
+                                <div class="result-label">Offer Price</div>
+                                <div class="result-value" id="calc-offer">$0.00</div>
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">Estimated Profit</div>
+                                <div class="result-value" id="calc-profit">$0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Buy Sheet Tab -->
+        <section id="buy-sheet" class="tab-content">
+            <div class="buy-sheet-layout">
+                <div class="buy-sheet-main">
+                    <div class="buy-sheet-header">
+                        <div class="header-left">
+                            <h2>Buy Sheet Manager</h2>
+                            <span id="buy-sheet-status" class="status-badge status-pending">Pending</span>
+                        </div>
+                        <div class="header-actions">
+                            <button id="buy-sheet-confirm-btn" class="btn-primary">Confirm Transaction</button>
+                            <button id="buy-sheet-cancel-btn" class="btn-secondary">Cancel Sheet</button>
+                        </div>
+                    </div>
+
+                    <div class="buy-sheet-info-grid">
+                        <div class="info-block">
+                            <span class="info-label">Customer</span>
+                            <div class="info-value with-autocomplete">
+                                <input type="text" id="buy-sheet-customer" class="form-control" placeholder="Search or enter customer" autocomplete="off" required>
+                                <div id="customer-autocomplete" class="autocomplete-dropdown"></div>
+                            </div>
+                            <div class="info-subgrid">
+                                <input type="tel" id="buy-sheet-phone" class="form-control" placeholder="Phone">
+                                <input type="email" id="buy-sheet-email" class="form-control" placeholder="Email">
+                            </div>
+                        </div>
+                        <div class="info-block">
+                            <span class="info-label">Sheet Details</span>
+                            <div class="info-value">
+                                <div class="info-row">
+                                    <span class="info-key">Sheet ID:</span>
+                                    <span id="buy-sheet-id" class="info-data">—</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">Date:</span>
+                                    <span id="buy-sheet-date" class="info-data">—</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">Event:</span>
+                                    <span id="buy-sheet-event" class="info-data">Select an event</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="info-block">
+                            <span class="info-label">Location & Notes</span>
+                            <div class="info-value">
+                                <input type="text" id="buy-sheet-address" class="form-control" placeholder="Street address">
+                                <div class="info-subgrid">
+                                    <input type="text" id="buy-sheet-city" class="form-control" placeholder="City">
+                                    <input type="text" id="buy-sheet-state" class="form-control" placeholder="State">
+                                    <input type="text" id="buy-sheet-zip" class="form-control" placeholder="ZIP">
+                                </div>
+                                <textarea id="buy-sheet-notes" class="form-control" rows="2" placeholder="Internal notes..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="buy-sheet-table-header">
+                        <h3>Line Items</h3>
+                        <div class="table-actions" style="display: flex; gap: 0.5rem;">
+                            <button id="buy-sheet-add-scrap" class="btn-secondary btn-icon">
+                                <span class="icon">SCRAP</span>
+                                Add Scrap
+                            </button>
+                            <button id="buy-sheet-add-inline" class="btn-secondary btn-icon">
+                                <span class="icon">+</span>
+                                Add Item
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="buy-sheet-table-container">
+                        <table class="buy-sheet-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 64px;">#</th>
+                                    <th style="width: 200px;">Category</th>
+                                    <th>Description</th>
+                                    <th style="width: 140px;">Quantity</th>
+                                    <th style="width: 160px;">Offer</th>
+                                    <th style="width: 120px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="buy-sheet-table-body">
+                                <tr class="empty-row">
+                                    <td colspan="6">
+                                        <div class="empty-message">
+                                            <p>No items yet. Click "Add Item" to get started.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="buy-sheet-footer">
+                        <div class="totals-group">
+                            <div class="total-card">
+                                <span class="total-label">Total Items</span>
+                                <span id="buy-sheet-total-items" class="total-value">0</span>
+                            </div>
+                            <div class="total-card">
+                                <span class="total-label">Total Offer</span>
+                                <span id="buy-sheet-total-offer" class="total-value highlight">$0.00</span>
+                            </div>
+                        </div>
+                        <div class="footer-meta">
+                            <span id="buy-sheet-last-saved" class="meta-item">Last saved: —</span>
+                            <span id="buy-sheet-lock-indicator" class="meta-item hidden">🔒 Sheet locked</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="buy-sheet-item-modal" class="modal">
+                    <div class="modal-content modal-content-wide">
+                        <div class="modal-header">
+                            <div>
+                                <h2 id="buy-sheet-modal-title">New Item</h2>
+                                <p id="buy-sheet-modal-subtitle" class="modal-subtitle">Configure the item details.</p>
+                            </div>
+                            <button class="modal-close" id="buy-sheet-modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body buy-sheet-modal-body">
+                            <div id="drawer-section-metal" class="drawer-section">
+                            <h4>Precious Metal Details</h4>
+                            <div class="form-group">
+                                <label for="drawer-metal-karat">Karat / Purity</label>
+                                <select id="drawer-metal-karat" class="form-control">
+                                    <option value="">Select karat</option>
+                                    <option value="24">24K (100%)</option>
+                                    <option value="22">22K (91.7%)</option>
+                                    <option value="18">18K (75%)</option>
+                                    <option value="14">14K (58.3%)</option>
+                                    <option value="10">10K (41.7%)</option>
+                                    <option value="925">925 Sterling (92.5%)</option>
+                                    <option value="900">900 (90%)</option>
+                                    <option value="800">800 (80%)</option>
+                                    <option value="1">Pure (100%)</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="drawer-metal-weight">Weight (grams)</label>
+                                    <input type="number" id="drawer-metal-weight" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label>Market Price</label>
+                                    <div class="input-with-note">
+                                        <input type="number" id="drawer-metal-market" class="form-control" readonly>
+                                        <small>Auto synced</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="drawer-metal-offer-pct">Offer Percentage</label>
+                                <div class="slider-group">
+                                    <input type="range" id="drawer-metal-offer-pct" min="0" max="100" step="1" value="85">
+                                    <span id="drawer-metal-offer-pct-display" class="slider-value">85%</span>
+                                </div>
+                            </div>
+                            <div class="calc-summary">
+                                <div>
+                                    <span class="summary-label">Melt Value</span>
+                                    <span id="drawer-metal-melt" class="summary-value">$0.00</span>
+                                </div>
+                                <div>
+                                    <span class="summary-label">Offer Amount</span>
+                                    <span id="drawer-metal-offer" class="summary-value">$0.00</span>
+                                </div>
+                                <div>
+                                    <span class="summary-label">Profit</span>
+                                    <span id="drawer-metal-profit" class="summary-value">$0.00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="drawer-section-watch" class="drawer-section">
+                            <h4>Watch Details</h4>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="drawer-watch-brand">Brand</label>
+                                    <input type="text" id="drawer-watch-brand" class="form-control" placeholder="Rolex, Omega...">
+                                </div>
+                                <div class="form-group">
+                                    <label for="drawer-watch-model">Model</label>
+                                    <input type="text" id="drawer-watch-model" class="form-control" placeholder="Submariner, Speedmaster...">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="drawer-watch-condition">Condition</label>
+                                <select id="drawer-watch-condition" class="form-control">
+                                    <option value="">Select condition</option>
+                                    <option value="mint">Mint</option>
+                                    <option value="excellent">Excellent</option>
+                                    <option value="good">Good</option>
+                                    <option value="fair">Fair</option>
+                                    <option value="project">Project / Parts</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="drawer-watch-resale">Estimated Resale Value</label>
+                                <input type="number" id="drawer-watch-resale" class="form-control" min="0" step="0.01" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label for="drawer-watch-offer-pct">Offer Percentage</label>
+                                <div class="slider-group">
+                                    <input type="range" id="drawer-watch-offer-pct" min="0" max="100" step="1" value="70">
+                                    <span id="drawer-watch-offer-pct-display" class="slider-value">70%</span>
+                                </div>
+                            </div>
+                            <div class="calc-summary">
+                                <div>
+                                    <span class="summary-label">Recommended Offer</span>
+                                    <span id="drawer-watch-offer" class="summary-value">$0.00</span>
+                                </div>
+                                <div>
+                                    <span class="summary-label">Estimated Profit</span>
+                                    <span id="drawer-watch-profit" class="summary-value">$0.00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="drawer-section-coin" class="drawer-section">
+                            <h4>Coin Details</h4>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="drawer-coin-type">Type</label>
+                                    <select id="drawer-coin-type" class="form-control">
+                                        <option value="">Select type</option>
+                                        <option value="us">U.S. Coin</option>
+                                        <option value="foreign">Foreign Coin</option>
+                                        <option value="bullion">Bullion</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="drawer-coin-year">Year</label>
+                                    <input type="text" id="drawer-coin-year" class="form-control" placeholder="Year">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="drawer-coin-grade">Grade / Condition</label>
+                                    <input type="text" id="drawer-coin-grade" class="form-control" placeholder="VG, XF, MS65, etc.">
+                                </div>
+                                <div class="form-group">
+                                    <label for="drawer-coin-reference">Reference Value</label>
+                                    <input type="number" id="drawer-coin-reference" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="calc-summary">
+                                <div>
+                                    <span class="summary-label">Offer Amount</span>
+                                    <span id="drawer-coin-offer" class="summary-value">$0.00</span>
+                                </div>
+                                <div>
+                                    <span class="summary-label">Estimated Profit</span>
+                                    <span id="drawer-coin-profit" class="summary-value">$0.00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="drawer-section-generic" class="drawer-section">
+                            <h4>Item Notes</h4>
+                            <textarea id="drawer-item-notes" class="form-control" rows="3" placeholder="Additional details"></textarea>
+                        </div>
+                    </div>
+                        <div class="modal-footer buy-sheet-modal-footer">
+                            <button id="buy-sheet-modal-delete" class="btn-secondary danger hidden">Delete Item</button>
+                            <div class="modal-actions">
+                                <button id="buy-sheet-modal-cancel" class="btn-secondary">Cancel</button>
+                                <button id="buy-sheet-modal-save" class="btn-primary">Save Item</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Buy List Tab -->
+        <section id="buy-list" class="tab-content">
+            <div class="section-header">
+                <h2>Event Buy List / Inventory</h2>
+                <button id="add-item-btn" class="btn-primary">Add Item</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">Merge</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Metal Type</th>
+                            <th>Karat/Purity</th>
+                            <th>Quantity</th>
+                            <th>Weight (g)</th>
+                            <th>Melt Value</th>
+                            <th>Offer</th>
+                            <th>Actual Profit<br><small>(Est. Profit)</small></th>
+                            <th>Date Purchased</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="buy-list-tbody">
+                        <tr>
+                            <td colspan="11" class="empty-message">Please select an event first.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="buy-list-totals" class="buy-list-totals">
+                <div class="totals-grid">
+                    <div class="total-item">
+                        <label>Total Weight:</label>
+                        <strong id="buy-list-total-weight">0.00 g</strong>
+                    </div>
+                    <div class="total-item">
+                        <label>Total Melt Value:</label>
+                        <strong id="buy-list-total-melt">$0.00</strong>
+                    </div>
+                    <div class="total-item">
+                        <label>Total Offer:</label>
+                        <strong id="buy-list-total-offer">$0.00</strong>
+                    </div>
+                    <div class="total-item">
+                        <label>Total Profit:</label>
+                        <strong id="buy-list-total-profit">$0.00</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sales Tab -->
+        <section id="sales" class="tab-content">
+            <div class="section-header">
+                <h2>Sales</h2>
+                <button id="add-sale-btn" class="btn-primary">Add Sale</button>
+            </div>
+            <div class="table-container sales-table-container">
+                <table class="data-table sales-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Metal/Description</th>
+                            <th>Weight (g)</th>
+                            <th>Price/Gram</th>
+                            <th>Revenue</th>
+                            <th>Cost</th>
+                            <th class="profit-column">Profit</th>
+                            <th>Buyer</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sales-tbody">
+                        <tr>
+                            <td colspan="10" class="empty-message">Please select an event first.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="sales-totals" class="sales-totals">
+                <div class="sales-totals-grid">
+                    <div class="sales-total-card">
+                        <div class="sales-total-label">Total Sales</div>
+                        <div class="sales-total-value" id="sales-total-count">0</div>
+                    </div>
+                    <div class="sales-total-card">
+                        <div class="sales-total-label">Total Revenue</div>
+                        <div class="sales-total-value revenue" id="sales-total-revenue">$0.00</div>
+                    </div>
+                    <div class="sales-total-card">
+                        <div class="sales-total-label">Total Cost</div>
+                        <div class="sales-total-value cost" id="sales-total-cost">$0.00</div>
+                    </div>
+                    <div class="sales-total-card highlight">
+                        <div class="sales-total-label">Total Profit</div>
+                        <div class="sales-total-value profit" id="sales-total-profit">$0.00</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Expenses Tab -->
+        <section id="expenses" class="tab-content">
+            <div class="section-header">
+                <h2>Expenses</h2>
+                <button id="add-expense-btn" class="btn-primary">Add Expense</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expenses-tbody">
+                        <tr>
+                            <td colspan="5" class="empty-message">Please select an event first.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Reports Tab -->
+        <section id="reports" class="tab-content">
+            <div class="section-header">
+                <h2>Profit & Loss Report</h2>
+                <div class="section-actions">
+                    <button id="recalculate-pl-btn" class="btn-secondary">Recalculate P/L</button>
+                    <button id="export-report-btn" class="btn-primary">Export Report</button>
+                </div>
+            </div>
+            
+            <div id="reports-empty-message" class="reports-empty-message" style="display: none;">
+                <p class="empty-message">Please select an event first to view P/L report.</p>
+            </div>
+
+            <div id="reports-content" class="reports-content">
+                <div class="pl-container">
+                    <div class="pl-section">
+                        <h3>A. Purchases</h3>
+                        <div class="pl-summary">
+                            <div class="pl-summary-item">
+                                <span>Purchase of Goods:</span>
+                                <strong id="pl-total-offer">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pl-section">
+                        <h3>B. Sales</h3>
+                        <div class="pl-summary">
+                            <div class="pl-summary-item">
+                                <span>Total Revenue:</span>
+                                <strong id="pl-total-revenue">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pl-section">
+                        <h3>C. Expenses</h3>
+                        <div class="pl-summary">
+                            <div class="pl-summary-item">
+                                <span>Total Expenses:</span>
+                                <strong id="pl-summary-expenses">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pl-section pl-section-highlight">
+                        <h3>D. Summary</h3>
+                        <div class="pl-summary">
+                            <div class="pl-summary-item highlight">
+                                <span>Net Profit:</span>
+                                <strong id="pl-net-profit">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Event Planning Tab -->
+        <section id="event-planning" class="tab-content">
+            <div class="section-header">
+                <h2>Event Planning & Market Research</h2>
+            </div>
+
+            <div class="event-planning-container">
+                <!-- City Research Section -->
+                <div class="research-section">
+                    <div class="section-card">
+                        <div class="section-card-header">
+                            <h3>🔍 City Research</h3>
+                            <p class="section-description">Research cities by name or ZIP code to analyze market potential</p>
+                        </div>
+                        <div class="section-card-body">
+                            <form id="market-research-form" class="market-research-form">
+                                <div class="search-tabs">
+                                    <button type="button" class="search-tab-btn active" data-search-type="city">City Search</button>
+                                    <button type="button" class="search-tab-btn" data-search-type="zip">ZIP Code Search</button>
+                                </div>
+                                
+                                <div id="city-search-form" class="search-form-content">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="research-city">City Name *</label>
+                                            <input type="text" id="research-city" class="form-control" placeholder="e.g., Phoenix">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="research-state">State *</label>
+                                            <select id="research-state" class="form-control">
+                                                <option value="">Select State</option>
+                                                <option value="01">Alabama</option>
+                                                <option value="02">Alaska</option>
+                                                <option value="04">Arizona</option>
+                                                <option value="05">Arkansas</option>
+                                                <option value="06">California</option>
+                                                <option value="08">Colorado</option>
+                                                <option value="09">Connecticut</option>
+                                                <option value="10">Delaware</option>
+                                                <option value="11">District of Columbia</option>
+                                                <option value="12">Florida</option>
+                                                <option value="13">Georgia</option>
+                                                <option value="15">Hawaii</option>
+                                                <option value="16">Idaho</option>
+                                                <option value="17">Illinois</option>
+                                                <option value="18">Indiana</option>
+                                                <option value="19">Iowa</option>
+                                                <option value="20">Kansas</option>
+                                                <option value="21">Kentucky</option>
+                                                <option value="22">Louisiana</option>
+                                                <option value="23">Maine</option>
+                                                <option value="24">Maryland</option>
+                                                <option value="25">Massachusetts</option>
+                                                <option value="26">Michigan</option>
+                                                <option value="27">Minnesota</option>
+                                                <option value="28">Mississippi</option>
+                                                <option value="29">Missouri</option>
+                                                <option value="30">Montana</option>
+                                                <option value="31">Nebraska</option>
+                                                <option value="32">Nevada</option>
+                                                <option value="33">New Hampshire</option>
+                                                <option value="34">New Jersey</option>
+                                                <option value="35">New Mexico</option>
+                                                <option value="36">New York</option>
+                                                <option value="37">North Carolina</option>
+                                                <option value="38">North Dakota</option>
+                                                <option value="39">Ohio</option>
+                                                <option value="40">Oklahoma</option>
+                                                <option value="41">Oregon</option>
+                                                <option value="42">Pennsylvania</option>
+                                                <option value="44">Rhode Island</option>
+                                                <option value="45">South Carolina</option>
+                                                <option value="46">South Dakota</option>
+                                                <option value="47">Tennessee</option>
+                                                <option value="48">Texas</option>
+                                                <option value="49">Utah</option>
+                                                <option value="50">Vermont</option>
+                                                <option value="51">Virginia</option>
+                                                <option value="53">Washington</option>
+                                                <option value="54">West Virginia</option>
+                                                <option value="55">Wisconsin</option>
+                                                <option value="56">Wyoming</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="zip-search-form" class="search-form-content" style="display: none;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="research-zip">ZIP Code *</label>
+                                            <input type="text" id="research-zip" class="form-control" placeholder="e.g., 85001" maxlength="5" pattern="[0-9]{5}">
+                                            <small class="form-help">Enter a 5-digit ZIP code</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-primary" id="research-submit-btn">
+                                        <span id="research-btn-text">Search</span>
+                                        <span id="research-loading" style="display: none;">Loading...</span>
+                                    </button>
+                                </div>
+                            </form>
+
+                            <!-- Results Display -->
+                            <div id="market-research-results" class="market-research-results" style="display: none;">
+                                <div class="results-header">
+                                    <h3 id="results-city-name">City Data</h3>
+                                    <div class="results-actions">
+                                        <button class="btn-primary" onclick="addToEventPlanner()" id="add-to-planner-btn">Add to Event Planner</button>
+                                        <button class="btn-secondary" onclick="clearMarketResearch()">Clear</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Profit Opportunity Score -->
+                                <div class="opportunity-score-section">
+                                    <div class="score-card">
+                                        <div class="score-label">Profit Opportunity Score</div>
+                                        <div class="score-value" id="opportunity-score">-</div>
+                                        <div class="score-bar">
+                                            <div class="score-bar-fill" id="score-bar-fill"></div>
+                                        </div>
+                                        <div class="score-description" id="score-description"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="results-content">
+                                    <div class="demographics-grid">
+                                        <div class="demographic-card">
+                                            <div class="demographic-label">Total Population</div>
+                                            <div class="demographic-value" id="result-population">-</div>
+                                        </div>
+                                        <div class="demographic-card highlight">
+                                            <div class="demographic-label">Median Household Income</div>
+                                            <div class="demographic-value" id="result-income">-</div>
+                                        </div>
+                                        <div class="demographic-card">
+                                            <div class="demographic-label">Median Age</div>
+                                            <div class="demographic-value" id="result-age">-</div>
+                                        </div>
+                                        <div class="demographic-card">
+                                            <div class="demographic-label">Median Home Value</div>
+                                            <div class="demographic-value" id="result-home-value">-</div>
+                                        </div>
+                                        <div class="demographic-card">
+                                            <div class="demographic-label">Homeownership Rate</div>
+                                            <div class="demographic-value" id="result-homeownership">-</div>
+                                        </div>
+                                        <div class="demographic-card">
+                                            <div class="demographic-label">Competition Count</div>
+                                            <div class="demographic-value" id="result-competition">-</div>
+                                            <small class="competition-note" id="competition-note">Gold buyers & pawn shops</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="age-distribution-section">
+                                        <h4>Age Distribution</h4>
+                                        <div class="age-distribution-grid" id="age-distribution-grid">
+                                            <!-- Age groups will be rendered here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="market-research-error" class="error-message" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Event Planner Section -->
+                <div class="event-planner-section">
+                    <div class="section-card">
+                        <div class="section-card-header">
+                            <h3>📅 Event Planner</h3>
+                            <p class="section-description">Step-by-step event planning wizard</p>
+                        </div>
+                        <div class="section-card-body">
+                            <div class="event-planner-actions">
+                                <button class="btn-primary" id="create-event-btn">Start Planning New Event</button>
+                            </div>
+                            
+                            <!-- Event Planning Wizard -->
+                            <div id="event-planning-wizard" class="event-planning-wizard" style="display: none;">
+                                <!-- Progress Steps -->
+                                <div class="wizard-progress">
+                                    <div class="wizard-step" data-step="1">
+                                        <div class="step-number active">1</div>
+                                        <div class="step-label">Find City</div>
+                                    </div>
+                                    <div class="wizard-line"></div>
+                                    <div class="wizard-step" data-step="2">
+                                        <div class="step-number">2</div>
+                                        <div class="step-label">Find Venue</div>
+                                    </div>
+                                    <div class="wizard-line"></div>
+                                    <div class="wizard-step" data-step="3">
+                                        <div class="step-number">3</div>
+                                        <div class="step-label">Check Licenses</div>
+                                    </div>
+                                    <div class="wizard-line"></div>
+                                    <div class="wizard-step" data-step="4">
+                                        <div class="step-number">4</div>
+                                        <div class="step-label">Complete</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Step 1: Find City -->
+                                <div class="wizard-step-content" id="wizard-step-1">
+                                    <h3>Step 1: Find Your City</h3>
+                                    <p class="step-description">Research cities by name or ZIP code to analyze market potential</p>
+                                    
+                                    <form id="wizard-market-research-form" class="market-research-form">
+                                        <div class="search-tabs">
+                                            <button type="button" class="search-tab-btn active" data-search-type="city">City Search</button>
+                                            <button type="button" class="search-tab-btn" data-search-type="zip">ZIP Code Search</button>
+                                        </div>
+                                        
+                                        <div id="wizard-city-search-form" class="search-form-content">
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="wizard-research-city">City Name *</label>
+                                                    <input type="text" id="wizard-research-city" class="form-control" placeholder="e.g., Phoenix">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="wizard-research-state">State *</label>
+                                                    <select id="wizard-research-state" class="form-control">
+                                                        <option value="">Select State</option>
+                                                        <option value="01">Alabama</option>
+                                                        <option value="02">Alaska</option>
+                                                        <option value="04">Arizona</option>
+                                                        <option value="05">Arkansas</option>
+                                                        <option value="06">California</option>
+                                                        <option value="08">Colorado</option>
+                                                        <option value="09">Connecticut</option>
+                                                        <option value="10">Delaware</option>
+                                                        <option value="11">District of Columbia</option>
+                                                        <option value="12">Florida</option>
+                                                        <option value="13">Georgia</option>
+                                                        <option value="15">Hawaii</option>
+                                                        <option value="16">Idaho</option>
+                                                        <option value="17">Illinois</option>
+                                                        <option value="18">Indiana</option>
+                                                        <option value="19">Iowa</option>
+                                                        <option value="20">Kansas</option>
+                                                        <option value="21">Kentucky</option>
+                                                        <option value="22">Louisiana</option>
+                                                        <option value="23">Maine</option>
+                                                        <option value="24">Maryland</option>
+                                                        <option value="25">Massachusetts</option>
+                                                        <option value="26">Michigan</option>
+                                                        <option value="27">Minnesota</option>
+                                                        <option value="28">Mississippi</option>
+                                                        <option value="29">Missouri</option>
+                                                        <option value="30">Montana</option>
+                                                        <option value="31">Nebraska</option>
+                                                        <option value="32">Nevada</option>
+                                                        <option value="33">New Hampshire</option>
+                                                        <option value="34">New Jersey</option>
+                                                        <option value="35">New Mexico</option>
+                                                        <option value="36">New York</option>
+                                                        <option value="37">North Carolina</option>
+                                                        <option value="38">North Dakota</option>
+                                                        <option value="39">Ohio</option>
+                                                        <option value="40">Oklahoma</option>
+                                                        <option value="41">Oregon</option>
+                                                        <option value="42">Pennsylvania</option>
+                                                        <option value="44">Rhode Island</option>
+                                                        <option value="45">South Carolina</option>
+                                                        <option value="46">South Dakota</option>
+                                                        <option value="47">Tennessee</option>
+                                                        <option value="48">Texas</option>
+                                                        <option value="49">Utah</option>
+                                                        <option value="50">Vermont</option>
+                                                        <option value="51">Virginia</option>
+                                                        <option value="53">Washington</option>
+                                                        <option value="54">West Virginia</option>
+                                                        <option value="55">Wisconsin</option>
+                                                        <option value="56">Wyoming</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div id="wizard-zip-search-form" class="search-form-content" style="display: none;">
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="wizard-research-zip">ZIP Code *</label>
+                                                    <input type="text" id="wizard-research-zip" class="form-control" placeholder="e.g., 85001" maxlength="5" pattern="[0-9]{5}">
+                                                    <small class="form-help">Enter a 5-digit ZIP code</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-actions">
+                                            <button type="submit" class="btn-primary" id="wizard-research-submit-btn">
+                                                <span id="wizard-research-btn-text">Search</span>
+                                                <span id="wizard-research-loading" style="display: none;">Loading...</span>
+                                            </button>
+                                        </div>
+                                    </form>
+
+                                    <!-- Results Display -->
+                                    <div id="wizard-market-research-results" class="market-research-results" style="display: none;">
+                                        <div class="results-header">
+                                            <h3 id="wizard-results-city-name">City Data</h3>
+                                        </div>
+                                        
+                                        <!-- Profit Opportunity Score -->
+                                        <div class="opportunity-score-section">
+                                            <div class="score-card">
+                                                <div class="score-label">Profit Opportunity Score</div>
+                                                <div class="score-value" id="wizard-opportunity-score">-</div>
+                                                <div class="score-bar">
+                                                    <div class="score-bar-fill" id="wizard-score-bar-fill"></div>
+                                                </div>
+                                                <div class="score-description" id="wizard-score-description"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="results-content">
+                                            <div class="demographics-grid">
+                                                <div class="demographic-card">
+                                                    <div class="demographic-label">Total Population</div>
+                                                    <div class="demographic-value" id="wizard-result-population">-</div>
+                                                </div>
+                                                <div class="demographic-card highlight">
+                                                    <div class="demographic-label">Median Household Income</div>
+                                                    <div class="demographic-value" id="wizard-result-income">-</div>
+                                                </div>
+                                                <div class="demographic-card">
+                                                    <div class="demographic-label">Median Age</div>
+                                                    <div class="demographic-value" id="wizard-result-age">-</div>
+                                                </div>
+                                                <div class="demographic-card">
+                                                    <div class="demographic-label">Median Home Value</div>
+                                                    <div class="demographic-value" id="wizard-result-home-value">-</div>
+                                                </div>
+                                                <div class="demographic-card">
+                                                    <div class="demographic-label">Homeownership Rate</div>
+                                                    <div class="demographic-value" id="wizard-result-homeownership">-</div>
+                                                </div>
+                                                <div class="demographic-card">
+                                                    <div class="demographic-label">Local Competition</div>
+                                                    <div class="demographic-value" id="wizard-result-competition">-</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="wizard-city-selection" class="wizard-city-selection" style="display: none;">
+                                        <div class="selected-city-card">
+                                            <h4>Selected City</h4>
+                                            <div class="selected-city-info" id="wizard-selected-city-info">
+                                                <!-- City info will be displayed here -->
+                                            </div>
+                                            <button class="btn-secondary" onclick="clearWizardCity()">Change City</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="wizard-actions">
+                                        <button class="btn-secondary" onclick="cancelWizard()">Cancel</button>
+                                        <button class="btn-primary" id="wizard-step-1-next" onclick="wizardNextStep(1)" disabled>Next: Find Venue</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Step 2: Find Venue -->
+                                <div class="wizard-step-content" id="wizard-step-2" style="display: none;">
+                                    <h3>Step 2: Find Venue</h3>
+                                    <p class="step-description">Search for and select a venue for your event</p>
+                                    
+                                    <form id="venue-search-form" class="venue-search-form">
+                                        <div class="form-group">
+                                            <label for="venue-search">Search for Venue</label>
+                                            <div class="input-with-button">
+                                                <input type="text" id="venue-search" class="form-control" placeholder="e.g., Convention Center, Hotel, Community Center">
+                                                <button type="button" class="btn-secondary" onclick="searchVenue()">Search</button>
+                                            </div>
+                                            <small class="form-help">Enter venue name or type (e.g., "convention center", "hotel ballroom")</small>
+                                        </div>
+                                    </form>
+                                    
+                                    <div id="venue-results" class="venue-results" style="display: none;">
+                                        <h4>Venue Results</h4>
+                                        <div id="venue-results-list" class="venue-results-list">
+                                            <!-- Venue results will be displayed here -->
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="selected-venue" class="selected-venue-card" style="display: none;">
+                                        <h4>Selected Venue</h4>
+                                        <div id="selected-venue-info" class="selected-venue-info">
+                                            <!-- Selected venue info will be displayed here -->
+                                        </div>
+                                        <button class="btn-secondary" onclick="clearWizardVenue()">Change Venue</button>
+                                    </div>
+                                    
+                                    <div class="wizard-actions">
+                                        <button class="btn-secondary" onclick="wizardPreviousStep(2)">Back</button>
+                                        <button class="btn-secondary" onclick="cancelWizard()">Cancel</button>
+                                        <button class="btn-primary" id="wizard-step-2-next" onclick="wizardNextStep(2)" disabled>Next: Check Licenses</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Step 3: Check Licenses -->
+                                <div class="wizard-step-content" id="wizard-step-3" style="display: none;">
+                                    <h3>Step 3: Check Licenses</h3>
+                                    <p class="step-description">Check what licenses and permits are needed for your event location</p>
+                                    
+                                    <div class="license-check-section">
+                                        <div class="form-group">
+                                            <label>License Requirements for Gold Buying Events</label>
+                                            <div class="license-check-list" id="license-check-list">
+                                                <!-- License requirements will be displayed here -->
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="license-notes">License Notes</label>
+                                            <textarea id="license-notes" class="form-control" rows="4" placeholder="Add any notes about licenses, permits, or requirements..."></textarea>
+                                        </div>
+                                        
+                                        <div class="license-status-section">
+                                            <label>
+                                                <input type="checkbox" id="licenses-checked" onchange="updateLicenseStatus()">
+                                                <span>I have checked all license requirements</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="wizard-actions">
+                                        <button class="btn-secondary" onclick="wizardPreviousStep(3)">Back</button>
+                                        <button class="btn-secondary" onclick="cancelWizard()">Cancel</button>
+                                        <button class="btn-primary" id="wizard-step-3-next" onclick="wizardNextStep(3)" disabled>Next: Complete Event</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Step 4: Complete Event -->
+                                <div class="wizard-step-content" id="wizard-step-4" style="display: none;">
+                                    <h3>Step 4: Complete Event Details</h3>
+                                    <p class="step-description">Finalize your event information and save</p>
+                                    
+                                    <form id="wizard-complete-form">
+                                        <div class="form-group">
+                                            <label for="wizard-event-name">Event Name *</label>
+                                            <input type="text" id="wizard-event-name" class="form-control" required placeholder="e.g., Phoenix Gold Buying Event">
+                                        </div>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="wizard-start-date">Start Date *</label>
+                                                <input type="date" id="wizard-start-date" class="form-control" required>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="wizard-end-date">End Date</label>
+                                                <input type="date" id="wizard-end-date" class="form-control">
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="wizard-notes">Event Notes</label>
+                                            <textarea id="wizard-notes" class="form-control" rows="3" placeholder="Additional notes about the event..."></textarea>
+                                        </div>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="wizard-estimated-spend">Estimated Spend</label>
+                                                <input type="number" id="wizard-estimated-spend" class="form-control" step="0.01" min="0" placeholder="0.00">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="wizard-estimated-roi">Estimated ROI (%)</label>
+                                                <input type="number" id="wizard-estimated-roi" class="form-control" step="0.1" min="0" placeholder="0.0">
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="wizard-status">Status</label>
+                                            <select id="wizard-status" class="form-control">
+                                                <option value="draft">Draft</option>
+                                                <option value="active">Active</option>
+                                                <option value="completed">Completed</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="wizard-summary-section">
+                                            <h4>Event Summary</h4>
+                                            <div id="wizard-summary" class="wizard-summary-grid">
+                                                <!-- Summary will be displayed here -->
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="wizard-actions">
+                                            <button class="btn-secondary" onclick="wizardPreviousStep(4)">Back</button>
+                                            <button class="btn-secondary" onclick="cancelWizard()">Cancel</button>
+                                            <button type="submit" class="btn-primary" id="wizard-save-btn">Save Event</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <!-- Event List -->
+                            <div class="event-list-section">
+                                <h4>Saved Events</h4>
+                                <div id="event-list-container" class="event-list-container">
+                                    <!-- Events will be rendered here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CRM Management Tab -->
+        <section id="crm-management" class="tab-content">
+            <div class="section-header">
+                <h2>Customer CRM</h2>
+                <div class="section-actions" style="display: flex; gap: 1rem; align-items: center;">
+                    <input type="text" id="crm-search-input" class="form-control" placeholder="Search customers by name or phone..." style="max-width: 280px;">
+                    <button id="crm-refresh-btn" class="btn-secondary">Refresh</button>
+                </div>
+            </div>
+
+            <div class="crm-management-container" style="display: flex; flex-direction: column; gap: 2rem;">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Customers</div>
+                        <div class="stat-value" id="crm-total-customers">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Paid</div>
+                        <div class="stat-value" id="crm-total-paid">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Avg per Customer</div>
+                        <div class="stat-value" id="crm-average-value">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Most Recent Buy Sheet</div>
+                        <div class="stat-value" id="crm-most-recent">—</div>
+                    </div>
+                </div>
+
+                <div class="crm-layout" style="display: flex; gap: 2rem; align-items: stretch; flex-wrap: wrap;">
+                    <div class="crm-table-card" style="flex: 1 1 360px;">
+                        <div class="card" style="padding: 1.5rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08); background: #fff;">
+                            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <h3 style="margin: 0;">Customers</h3>
+                                <span id="crm-visible-count" style="color: var(--text-muted); font-size: 0.85rem;">0 visible</span>
+                            </div>
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Total Paid</th>
+                                            <th>Last Transaction</th>
+                                            <th>Buy Sheets</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="crm-customers-tbody">
+                                        <tr>
+                                            <td colspan="5" class="empty-message">No customers yet.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="crm-detail-card" id="crm-detail-panel" style="flex: 1 1 360px; background: #fff; border-radius: 12px; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08); padding: 1.5rem;">
+                        <div class="crm-detail-empty" style="text-align: center; color: var(--text-muted);">
+                            <h3 style="margin-bottom: 0.5rem;">Select a customer</h3>
+                            <p style="margin: 0;">Choose a customer to view contact details and buy sheet history.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buy Sheet Detail Modal -->
+                <div id="crm-buy-sheet-modal" class="modal" style="display: none;">
+                    <div class="modal-content modal-content-large">
+                        <span class="close" onclick="window.closeCRMModalBuySheet()">&times;</span>
+                        <div class="modal-header">
+                            <h2 id="crm-buy-sheet-modal-title">Buy Sheet</h2>
+                        </div>
+                        <div class="modal-body" id="crm-buy-sheet-modal-content" style="max-height: 70vh; overflow-y: auto;">
+                            <!-- Buy sheet details injected dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Tab -->
+        <section id="settings" class="tab-content">
+            <div class="section-header">
+                <h2>Settings</h2>
+            </div>
+
+            <div class="settings-container">
+                <!-- Profile Section -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <h3>Profile</h3>
+                    </div>
+                    <div class="settings-section-body">
+                        <div class="profile-section">
+                            <div class="profile-picture-section">
+                                <div class="profile-picture-container">
+                                    <img id="profile-picture-preview" src="" alt="Profile Picture" style="display: none;">
+                                    <div id="profile-picture-placeholder" class="profile-picture-placeholder">
+                                        <span class="avatar-icon">👤</span>
+                                    </div>
+                                    <input type="file" id="profile-picture-input" accept="image/*" style="display: none;">
+                                    <button type="button" class="btn-secondary" id="change-picture-btn">Change Picture</button>
+                                </div>
+                            </div>
+                            <div class="profile-form">
+                                <div class="form-group">
+                                    <label for="profile-name">Full Name</label>
+                                    <input type="text" id="profile-name" class="form-control" placeholder="Enter your full name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="profile-email">Email</label>
+                                    <input type="email" id="profile-email" class="form-control" disabled>
+                                </div>
+                                <button type="button" class="btn-primary" id="save-profile-btn">Save Profile</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Management Section (Admin Only) -->
+                <div id="admin-section" class="settings-section" style="display: none;">
+                    <div class="settings-section-header">
+                        <h3>Admin Management</h3>
+                        <button type="button" class="btn-primary btn-sm" id="add-admin-btn">Add Admin</button>
+                    </div>
+                    <div class="settings-section-body">
+                        <div class="admin-list-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-list-tbody">
+                                    <tr>
+                                        <td colspan="5" class="empty-message">Loading admins...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Roles Management Section (Admin Only) -->
+                <div id="roles-section" class="settings-section" style="display: none;">
+                    <div class="settings-section-header">
+                        <h3>Roles Management</h3>
+                        <button type="button" class="btn-primary btn-sm" id="add-role-btn">Add Role</button>
+                    </div>
+                    <div class="settings-section-body">
+                        <div class="roles-list-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Role Name</th>
+                                        <th>Permissions</th>
+                                        <th>Users</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="roles-list-tbody">
+                                    <tr>
+                                        <td colspan="4" class="empty-message">Loading roles...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Employees Management Section (Admin Only) -->
+                <div id="employees-section" class="settings-section" style="display: none;">
+                    <div class="settings-section-header">
+                        <h3>Employees Management</h3>
+                        <div style="display: flex; gap: 1rem; align-items: center;">
+                            <input type="text" id="employee-search-input" class="form-control" placeholder="Search employees..." style="width: 250px; margin: 0;">
+                            <button type="button" class="btn-primary btn-sm" id="add-employee-btn">Add Employee</button>
+                        </div>
+                    </div>
+                    <div class="settings-section-body">
+                        <div class="employees-list-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Joined</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employees-list-tbody">
+                                    <tr>
+                                        <td colspan="6" class="empty-message">Loading employees...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modals -->
+    <div id="new-event-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-header">
+                <h2>Create New Event</h2>
+            </div>
+            <div class="modal-body">
+                <form id="new-event-form">
+                    <div class="form-group">
+                        <label for="event-name">Event Name</label>
+                        <input type="text" id="event-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="event-date">Event Date</label>
+                        <input type="date" id="event-date" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Create Event</button>
+                        <button type="button" class="btn-secondary close-modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-item-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-header">
+                <h2>Add Item to Buy List</h2>
+            </div>
+            <div class="modal-body">
+                <form id="add-item-form">
+                    <div class="form-group">
+                        <label for="item-category">Category</label>
+                        <select id="item-category" class="form-control" required>
+                            <option value="">-- Select Category --</option>
+                            <option value="U.S. Coins">U.S. Coins</option>
+                            <option value="Gold Jewelry">Gold Jewelry</option>
+                            <option value="Silver Jewelry">Silver Jewelry</option>
+                            <option value="Watches">Watches</option>
+                            <option value="Purses">Purses</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-metal">Metal Type</label>
+                        <select id="item-metal" class="form-control">
+                            <option value="">-- Select Metal --</option>
+                            <option value="Gold">Gold</option>
+                            <option value="Silver">Silver</option>
+                            <option value="Platinum">Platinum</option>
+                            <option value="Palladium">Palladium</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-karat">Karat / Purity</label>
+                        <select id="item-karat" class="form-control">
+                            <option value="">-- Select Karat --</option>
+                            <option value="24">24K (100%)</option>
+                            <option value="22">22K (91.7%)</option>
+                            <option value="18">18K (75%)</option>
+                            <option value="14">14K (58.3%)</option>
+                            <option value="10">10K (41.7%)</option>
+                            <option value="925">925 Sterling (92.5%)</option>
+                            <option value="900">900 (90%)</option>
+                            <option value="800">800 (80%)</option>
+                            <option value="1">100% Pure</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-quantity">Quantity</label>
+                        <input type="number" id="item-quantity" class="form-control" step="1" min="1" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-weight">Weight (grams)</label>
+                        <input type="number" id="item-weight" class="form-control" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-market-price">Market Price per Gram</label>
+                        <input type="number" id="item-market-price" class="form-control" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-offer-pct">Offer Percentage (e.g., 0.85 for 85%)</label>
+                        <input type="number" id="item-offer-pct" class="form-control" step="0.01" min="0" max="1" value="0.85" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-date">Date Purchased</label>
+                        <input type="date" id="item-date" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Add Item</button>
+                        <button type="button" class="btn-secondary close-modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-sale-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-header">
+                <h2>Add Sale</h2>
+            </div>
+            <div class="modal-body">
+                <form id="add-sale-form">
+                    <div class="form-group">
+                        <label for="sale-buy-item">Select Item from Buy List *</label>
+                        <select id="sale-buy-item" class="form-control" required>
+                            <option value="">-- Select an item you purchased --</option>
+                        </select>
+                        <small class="form-help">Select the item from your buy list that you're selling</small>
+                    </div>
+
+                    <div id="sale-item-details" class="info-box" style="display: none; margin-top: 1rem;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                            <div>
+                                <strong>Category:</strong> <span id="sale-item-category">-</span>
+                            </div>
+                            <div>
+                                <strong>Type:</strong> <span id="sale-item-type-display">-</span>
+                            </div>
+                            <div>
+                                <strong>Purchase Cost:</strong> <span id="sale-item-cost" style="color: var(--primary); font-weight: 700;">$0.00</span>
+                            </div>
+                            <div>
+                                <strong>Available:</strong> <span id="sale-item-available">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="sale-weight-group" class="form-group" style="display: none;">
+                        <label for="sale-weight">Weight Sold (grams) *</label>
+                        <input type="number" id="sale-weight" class="form-control" step="0.01" min="0" placeholder="Enter weight to sell">
+                        <small class="form-help">Enter the amount you're selling (cannot exceed available weight)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sale-price">Sale Price *</label>
+                        <input type="number" id="sale-price" class="form-control" step="0.01" min="0" placeholder="Enter total sale price" required>
+                        <small class="form-help">Enter the total amount you received for this sale</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sale-buyer">Buyer</label>
+                        <input type="text" id="sale-buyer" class="form-control" placeholder="Enter buyer name">
+                    </div>
+                    <div class="form-group">
+                        <label for="sale-date">Sale Date</label>
+                        <input type="date" id="sale-date" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Add Sale</button>
+                        <button type="button" class="btn-secondary close-modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-expense-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-header">
+                <h2>Add Expense</h2>
+            </div>
+            <div class="modal-body">
+                <form id="add-expense-form">
+                    <div class="form-group">
+                        <label for="expense-category">Category</label>
+                        <select id="expense-category" class="form-control" required>
+                            <option value="">-- Select Category --</option>
+                            <option value="Rent">Rent</option>
+                            <option value="Utilities">Utilities</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="Equipment">Equipment</option>
+                            <option value="Travel">Travel</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense-description">Description</label>
+                        <input type="text" id="expense-description" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense-amount">Amount</label>
+                        <input type="number" id="expense-amount" class="form-control" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense-date">Date</label>
+                        <input type="date" id="expense-date" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Add Expense</button>
+                        <button type="button" class="btn-secondary close-modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-transaction-modal" class="modal">
+        <div class="modal-content modal-content-small">
+            <span class="close" onclick="closeConfirmTransactionModal()">&times;</span>
+            <div class="modal-header">
+                <h2>Confirm Transaction</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="confirm-check-number">Check Number *</label>
+                    <input type="text" id="confirm-check-number" class="form-control" placeholder="Enter check number (e.g., 1234)" autocomplete="off" required>
+                    <small class="form-help">Enter the check number used for payment</small>
+                </div>
+                <div class="confirmation-summary">
+                    <div class="summary-row">
+                        <span class="summary-label">Total Items:</span>
+                        <strong id="confirm-total-items" class="summary-value">0</strong>
+                    </div>
+                    <div class="summary-row summary-row-main">
+                        <span class="summary-label">Total Offer:</span>
+                        <strong id="confirm-total-offer" class="summary-value highlight">$0.00</strong>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn-secondary" onclick="closeConfirmTransactionModal()">Cancel</button>
+                    <button class="btn-primary" onclick="proceedWithConfirmation()">Confirm Transaction</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Planner Modal -->
+    <div id="event-planner-modal" class="modal">
+        <div class="modal-content modal-content-medium">
+            <span class="close" onclick="closeEventPlannerModal()">&times;</span>
+            <div class="modal-header">
+                <h2 id="event-planner-title">Create Event</h2>
+            </div>
+            <div class="modal-body">
+                <form id="event-planner-form">
+                    <div class="form-group">
+                        <label for="planner-event-name">Event Name *</label>
+                        <input type="text" id="planner-event-name" class="form-control" required placeholder="e.g., Phoenix Gold Buying Event">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="planner-start-date">Start Date *</label>
+                            <input type="date" id="planner-start-date" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="planner-end-date">End Date</label>
+                            <input type="date" id="planner-end-date" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="planner-venue">Venue / Location</label>
+                        <input type="text" id="planner-venue" class="form-control" placeholder="e.g., Convention Center">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="planner-notes">Notes</label>
+                        <textarea id="planner-notes" class="form-control" rows="3" placeholder="Additional notes about the event..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="planner-estimated-spend">Estimated Spend</label>
+                            <input type="number" id="planner-estimated-spend" class="form-control" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="planner-estimated-roi">Estimated ROI (%)</label>
+                            <input type="number" id="planner-estimated-roi" class="form-control" step="0.1" min="0" placeholder="0.0">
+                        </div>
+                    </div>
+                    
+                    <!-- Market Research Data (auto-filled if available) -->
+                    <div id="planner-research-data" class="research-data-section" style="display: none;">
+                        <h4>Market Research Data</h4>
+                        <div class="research-data-grid" id="planner-research-grid">
+                            <!-- Research data will be displayed here -->
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="planner-status">Status</label>
+                        <select id="planner-status" class="form-control">
+                            <option value="draft">Draft</option>
+                            <option value="active">Active</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="save-event-btn">Save Event</button>
+                        <button type="button" class="btn-secondary" onclick="closeEventPlannerModal()">Cancel</button>
+                        <button type="button" class="btn-secondary" id="delete-event-btn" style="display: none;" onclick="deletePlannedEvent()">Delete Event</button>
+                    </div>
+                    
+                    <input type="hidden" id="planner-event-id" value="">
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Appointment Modal -->
+    <div id="create-appointment-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('create-appointment-modal').style.display='none'">&times;</span>
+            <div class="modal-header">
+                <h2>Create Appointment</h2>
+            </div>
+            <div class="modal-body">
+                <form id="create-appointment-form">
+                    <div class="form-group" style="position: relative;">
+                        <label for="appointment-customer">Customer</label>
+                        <input type="text" id="appointment-customer" class="form-control" placeholder="Search customer..." autocomplete="off">
+                        <div id="appointment-customer-autocomplete" class="autocomplete-dropdown"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="appointment-address">Address *</label>
+                        <input type="text" id="appointment-address" class="form-control" placeholder="Enter address..." required>
+                    </div>
+                    <div class="form-group">
+                        <label for="appointment-date">Date *</label>
+                        <input type="date" id="appointment-date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="appointment-start-time">Start Time *</label>
+                        <input type="time" id="appointment-start-time" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="appointment-duration">Duration (minutes) *</label>
+                        <select id="appointment-duration" class="form-control" required>
+                            <option value="15">15 minutes</option>
+                            <option value="30" selected>30 minutes</option>
+                            <option value="45">45 minutes</option>
+                            <option value="60">1 hour</option>
+                            <option value="90">1.5 hours</option>
+                            <option value="120">2 hours</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="appointment-notes">Notes (Optional)</label>
+                        <textarea id="appointment-notes" class="form-control" rows="3" placeholder="Additional notes..."></textarea>
+                    </div>
+                    <div id="appointment-conflict-warning" class="error-message" style="display: none;">
+                        <p>⚠️ This appointment conflicts with an existing appointment!</p>
+                        <div id="conflict-details"></div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="save-appointment-btn">Create Appointment</button>
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('create-appointment-modal').style.display='none'">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    </div>
+    <!-- End Main App -->
+
+    <!-- Add Admin Modal -->
+    <div id="add-admin-modal" class="modal">
+        <div class="modal-content modal-content-small">
+            <div class="modal-header">
+                <h2>Add Admin</h2>
+                <button class="modal-close" onclick="closeModal('add-admin-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-admin-form">
+                    <div class="form-group">
+                        <label for="admin-email">Email</label>
+                        <input type="email" id="admin-email" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-name">Full Name</label>
+                        <input type="text" id="admin-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-role-select">Role</label>
+                        <select id="admin-role-select" class="form-control" required>
+                            <option value="admin">Admin</option>
+                            <option value="manager">Manager</option>
+                            <option value="user">User</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Add Admin</button>
+                        <button type="button" class="btn-secondary" onclick="closeModal('add-admin-modal')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Role Modal -->
+    <div id="add-role-modal" class="modal">
+        <div class="modal-content modal-content-small">
+            <div class="modal-header">
+                <h2>Add Role</h2>
+                <button class="modal-close" onclick="closeModal('add-role-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-role-form">
+                    <div class="form-group">
+                        <label for="role-name-input">Role Name</label>
+                        <input type="text" id="role-name-input" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Permissions</label>
+                        <div class="permissions-checklist">
+                            <label><input type="checkbox" name="permissions" value="view_dashboard"> View Dashboard</label>
+                            <label><input type="checkbox" name="permissions" value="manage_events"> Manage Events</label>
+                            <label><input type="checkbox" name="permissions" value="manage_sales"> Manage Sales</label>
+                            <label><input type="checkbox" name="permissions" value="manage_expenses"> Manage Expenses</label>
+                            <label><input type="checkbox" name="permissions" value="manage_customers"> Manage Customers</label>
+                            <label><input type="checkbox" name="permissions" value="view_reports"> View Reports</label>
+                            <label><input type="checkbox" name="permissions" value="manage_admins"> Manage Admins</label>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Create Role</button>
+                        <button type="button" class="btn-secondary" onclick="closeModal('add-role-modal')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Employee Modal -->
+    <div id="add-employee-modal" class="modal">
+        <div class="modal-content modal-content-small">
+            <div class="modal-header">
+                <h2>Add Employee</h2>
+                <button class="modal-close" onclick="closeModal('add-employee-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-employee-form">
+                    <div class="form-group">
+                        <label for="employee-email">Email</label>
+                        <input type="email" id="employee-email" class="form-control" required placeholder="employee@example.com">
+                        <small class="form-text">Employee must sign up first before you can add them.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="employee-name">Full Name</label>
+                        <input type="text" id="employee-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="employee-role-select">Role</label>
+                        <select id="employee-role-select" class="form-control" required>
+                            <option value="user">User</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Add Employee</button>
+                        <button type="button" class="btn-secondary" onclick="closeModal('add-employee-modal')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Employee Modal -->
+    <div id="edit-employee-modal" class="modal">
+        <div class="modal-content modal-content-small">
+            <div class="modal-header">
+                <h2>Edit Employee</h2>
+                <button class="modal-close" onclick="closeModal('edit-employee-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-employee-form">
+                    <input type="hidden" id="edit-employee-user-id">
+                    <div class="form-group">
+                        <label for="edit-employee-name">Full Name</label>
+                        <input type="text" id="edit-employee-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-employee-email">Email</label>
+                        <input type="email" id="edit-employee-email" class="form-control" disabled>
+                        <small class="form-text">Email cannot be changed.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-employee-role-select">Role</label>
+                        <select id="edit-employee-role-select" class="form-control" required>
+                            <option value="user">User</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Save Changes</button>
+                        <button type="button" class="btn-secondary" onclick="closeModal('edit-employee-modal')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
