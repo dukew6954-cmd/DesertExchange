@@ -61,6 +61,27 @@ function buildUrlWithProxy(originalUrl, proxyUrl) {
     return `${trimmedProxy}/${originalUrl}`;
 }
 
+function getYahooProxyList() {
+    const configuredList = getWindowConfig('DESERT_EXCHANGE_YAHOO_PROXIES', null);
+    if (Array.isArray(configuredList) && configuredList.length > 0) {
+        return configuredList.filter(Boolean);
+    }
+    const primaryProxy = getWindowConfig('DESERT_EXCHANGE_YAHOO_PROXY', null);
+    const defaults = [
+        primaryProxy,
+        'https://thingproxy.freeboard.io/fetch/',
+        'https://api.allorigins.win/raw?url=',
+        DEFAULT_YAHOO_FINANCE_PROXY
+    ];
+    const unique = [];
+    defaults.forEach(proxy => {
+        if (proxy && !unique.includes(proxy)) {
+            unique.push(proxy);
+        }
+    });
+    return unique;
+}
+
 function getYahooFinanceProxy() {
     return getWindowConfig('DESERT_EXCHANGE_YAHOO_PROXY', DEFAULT_YAHOO_FINANCE_PROXY);
 }
@@ -80,12 +101,15 @@ function buildYahooFinanceUrl(symbols, { useProxy } = {}) {
     const joinedSymbols = validSymbols.join(',');
     const baseUrl = `${YAHOO_FINANCE_BASE_URL}?symbols=${encodeURIComponent(joinedSymbols)}`;
 
+    if (typeof useProxy === 'string' && useProxy) {
+        return buildUrlWithProxy(baseUrl, useProxy);
+    }
+
     const proxyRequested = typeof useProxy === 'boolean' ? useProxy : shouldUseYahooProxyByDefault();
     if (proxyRequested) {
         const proxyUrl = getYahooFinanceProxy();
         if (proxyUrl) {
-            const trimmedProxy = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
-            return `${trimmedProxy}/${baseUrl}`;
+            return buildUrlWithProxy(baseUrl, proxyUrl);
         }
     }
 
@@ -271,7 +295,7 @@ function updateCalculatorMarketPrice({ triggerRecalculate = false, force = false
     }
 }
 
-async function fetchPreciousMetalPrices({ force = false, useProxyOverride = undefined } = {}) {
+async function fetchPreciousMetalPrices({ force = false, useProxyOverride = undefined, proxyIndex = 0 } = {}) {
     if (preciousMetalFetchInFlight) {
         return preciousMetalPrices;
     }
@@ -291,11 +315,20 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
     }
 
     const symbolList = Object.values(YAHOO_FINANCE_METAL_SYMBOLS);
-    const resolvedUseProxy = typeof useProxyOverride === 'boolean'
-        ? useProxyOverride
-        : shouldUseYahooProxyByDefault();
-    const requestUrl = buildYahooFinanceUrl(symbolList, { useProxy: resolvedUseProxy });
+    const proxyList = getYahooProxyList();
+    let proxyToUse = null;
+
+    if (typeof useProxyOverride === 'string') {
+        proxyToUse = useProxyOverride;
+    } else if (useProxyOverride === true) {
+        proxyToUse = proxyList[useProxyOverride === true ? proxyIndex : 0] || proxyList[0] || null;
+    } else if (shouldUseYahooProxyByDefault()) {
+        proxyToUse = proxyList[proxyIndex] || proxyList[0] || null;
+    }
+
+    const requestUrl = buildYahooFinanceUrl(symbolList, { useProxy: proxyToUse !== null ? proxyToUse : undefined });
     const corsAnywhereToken = getWindowConfig('DESERT_EXCHANGE_CORS_ANYWHERE_TOKEN', null);
+    const activeProxyIndex = proxyToUse !== null ? proxyList.findIndex(proxy => proxy === proxyToUse) : -1;
 
     toggleRefreshButtonLoading(true);
     preciousMetalFetchInFlight = true;
@@ -305,7 +338,7 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
             accept: 'application/json, text/plain, */*'
         };
 
-        if (resolvedUseProxy && corsAnywhereToken && /cors-anywhere/i.test(requestUrl)) {
+        if (proxyToUse && corsAnywhereToken && /cors-anywhere/i.test(requestUrl)) {
             headers['X-Cors-Api-Key'] = corsAnywhereToken;
         }
 
@@ -383,11 +416,18 @@ async function fetchPreciousMetalPrices({ force = false, useProxyOverride = unde
         updateCalculatorMarketPrice({ triggerRecalculate: true, force: true });
     } catch (error) {
         console.error('Failed to fetch precious metal prices from Yahoo Finance:', error);
-        if (resolvedUseProxy !== true && shouldFallbackToProxy(error)) {
+        if (proxyToUse === null && shouldFallbackToProxy(error)) {
             console.warn('Retrying precious metal price fetch through Yahoo Finance proxy.');
-            return fetchPreciousMetalPrices({ force, useProxyOverride: true });
+            return fetchPreciousMetalPrices({ force, useProxyOverride: true, proxyIndex: 0 });
         }
-        if (resolvedUseProxy === true && corsAnywhereToken === null && /cors-anywhere/i.test(requestUrl)) {
+        if ((error.name === 'TypeError' || (typeof error.status === 'number' && error.status >= 400)) && proxyToUse !== null) {
+            const nextIndex = activeProxyIndex + 1;
+            if (nextIndex < proxyList.length) {
+                console.warn(`Proxy failed (${proxyToUse}). Trying next proxy: ${proxyList[nextIndex]}`);
+                return fetchPreciousMetalPrices({ force, useProxyOverride: true, proxyIndex: nextIndex });
+            }
+        }
+        if (proxyToUse && corsAnywhereToken === null && /cors-anywhere/i.test(requestUrl)) {
             error.message = `${error.message}. cors-anywhere requires a token; set window.DESERT_EXCHANGE_CORS_ANYWHERE_TOKEN to a valid key or use a different proxy.`;
         }
         renderLiveMetalPrices(error);
