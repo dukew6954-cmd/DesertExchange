@@ -39,11 +39,21 @@ let preciousMetalPrices = {};
 let preciousMetalLastUpdated = null;
 let preciousMetalFetchInFlight = false;
 
-function getYahooFinanceProxy() {
-    if (typeof window !== 'undefined' && window.DESERT_EXCHANGE_YAHOO_PROXY) {
-        return window.DESERT_EXCHANGE_YAHOO_PROXY;
+function getWindowConfig(key, fallback = null) {
+    if (typeof window !== 'undefined' && Object.prototype.hasOwnProperty.call(window, key)) {
+        return window[key];
     }
-    return DEFAULT_YAHOO_FINANCE_PROXY;
+    return fallback;
+}
+
+function buildUrlWithProxy(originalUrl, proxyUrl) {
+    if (!proxyUrl) return originalUrl;
+    const trimmedProxy = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
+    return `${trimmedProxy}/${originalUrl}`;
+}
+
+function getYahooFinanceProxy() {
+    return getWindowConfig('DESERT_EXCHANGE_YAHOO_PROXY', DEFAULT_YAHOO_FINANCE_PROXY);
 }
 
 function shouldUseYahooProxyByDefault() {
@@ -9469,9 +9479,14 @@ async function searchMarketResearch(e) {
 async function getCityFromZip(zipCode) {
     // Use Census Geocoding API
     const geocodeUrl = `https://geocoding.geo.census.gov/geocoder/geographies/address?street=&zip=${zipCode}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
+    const proxiedUrl = buildUrlWithProxy(geocodeUrl, getWindowConfig('DESERT_EXCHANGE_GEO_PROXY', DEFAULT_YAHOO_FINANCE_PROXY));
     
     try {
-        const response = await fetch(geocodeUrl);
+        const response = await fetch(proxiedUrl, {
+            cache: 'no-store',
+            headers: { accept: 'application/json' },
+            mode: 'cors'
+        });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -9720,11 +9735,29 @@ async function fetchCompetitionCount(cityName, stateCode) {
         // Search for "pawn shop" in the city
         const query2 = `pawn shop ${cityName} ${getStateName(stateCode)}`;
         const url2 = `${GOOGLE_PLACES_BASE_URL}?query=${encodeURIComponent(query2)}&key=${GOOGLE_PLACES_API_KEY}`;
-        
+        const placesProxy = getWindowConfig('DESERT_EXCHANGE_PLACES_PROXY', DEFAULT_YAHOO_FINANCE_PROXY);
+        const requestUrl1 = buildUrlWithProxy(url1, placesProxy);
+        const requestUrl2 = buildUrlWithProxy(url2, placesProxy);
+
         const [response1, response2] = await Promise.all([
-            fetch(url1),
-            fetch(url2)
+            fetch(requestUrl1, {
+                cache: 'no-store',
+                headers: { accept: 'application/json' },
+                mode: 'cors'
+            }),
+            fetch(requestUrl2, {
+                cache: 'no-store',
+                headers: { accept: 'application/json' },
+                mode: 'cors'
+            })
         ]);
+
+        if (!response1.ok) {
+            throw new Error(`Google Places error (gold buyer): ${response1.status}`);
+        }
+        if (!response2.ok) {
+            throw new Error(`Google Places error (pawn shop): ${response2.status}`);
+        }
         
         const data1 = await response1.json();
         const data2 = await response2.json();
@@ -9749,9 +9782,14 @@ async function getPlaceFIPS(cityName, stateCode) {
     // Use Census Geocoding API to find place FIPS code
     // For now, we'll use a direct approach with the Census Geocoder API
     const geocodeUrl = `https://geocoding.geo.census.gov/geocoder/geographies/address?street=&city=${encodeURIComponent(cityName)}&state=${stateCode}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
+    const proxiedUrl = buildUrlWithProxy(geocodeUrl, getWindowConfig('DESERT_EXCHANGE_GEO_PROXY', DEFAULT_YAHOO_FINANCE_PROXY));
     
     try {
-        const response = await fetch(geocodeUrl);
+        const response = await fetch(proxiedUrl, {
+            cache: 'no-store',
+            headers: { accept: 'application/json' },
+            mode: 'cors'
+        });
         const data = await response.json();
         
         if (data.result && data.result.addressMatches && data.result.addressMatches.length > 0) {
