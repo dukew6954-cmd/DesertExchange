@@ -48,6 +48,15 @@ function getWindowConfig(key, fallback = null) {
 
 function buildUrlWithProxy(originalUrl, proxyUrl) {
     if (!proxyUrl) return originalUrl;
+    if (proxyUrl.includes('{url}')) {
+        return proxyUrl.replace('{url}', encodeURIComponent(originalUrl));
+    }
+    if (proxyUrl.includes('%URL%')) {
+        return proxyUrl.replace('%URL%', encodeURIComponent(originalUrl));
+    }
+    if (proxyUrl.endsWith('=') || proxyUrl.toLowerCase().endsWith('?url')) {
+        return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
+    }
     const trimmedProxy = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
     return `${trimmedProxy}/${originalUrl}`;
 }
