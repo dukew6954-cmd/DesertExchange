@@ -2602,6 +2602,17 @@ const BUY_SHEET_CONTACT_FIELDS = {
     zip: 'buy-sheet-zip'
 };
 
+const BUY_SHEET_CATEGORIES = [
+    'Gold Jewelry',
+    'Silver Jewelry',
+    'Platinum',
+    'Palladium',
+    'Watches',
+    'Coins',
+    'Electronics',
+    'Other'
+];
+
 let currentEvent = null;
 let currentBuySheet = createEmptyBuySheet();
 
@@ -3154,20 +3165,7 @@ function setupEventListeners() {
     });
     const addItemInlineBtn = document.getElementById('buy-sheet-add-inline');
     if (addItemInlineBtn) {
-        const inlineHandler = typeof handleBuySheetAddItem === 'function' ? handleBuySheetAddItem : openAddItemToSheetModal;
-        addItemInlineBtn.addEventListener('click', (event) => {
-            if (typeof inlineHandler === 'function') {
-                inlineHandler(event);
-            }
-        });
-    }
-    const addItemModalBtn = document.getElementById('add-item-to-sheet-btn');
-    if (addItemModalBtn) {
-        addItemModalBtn.addEventListener('click', openAddItemToSheetModal);
-    }
-    const addItemForm = document.getElementById('add-item-to-sheet-form');
-    if (addItemForm) {
-        addItemForm.addEventListener('submit', addItemToBuySheet);
+        addItemInlineBtn.addEventListener('click', openAddItemToSheetModal);
     }
 
     // Event Management
@@ -3805,37 +3803,91 @@ function renderBuySheet() {
         if (items.length === 0) {
             tableBody.innerHTML = `
                 <tr class="empty-row">
-                    <td colspan="7">
+                    <td colspan="6">
                         <div class="empty-message">
-                            <p>No items yet. Click “Add Item” to get started.</p>
+                            <p>No items yet. Click "Add Item" to get started.</p>
                         </div>
                     </td>
                 </tr>
             `;
-    } else {
-            tableBody.innerHTML = items.map((item, index) => {
-                const category = item.category || (item.isNonMetal ? 'Item' : 'Metal');
-                const description = item.description || (item.isNonMetal ? '' : `${item.metal || ''} ${item.karat ? `${item.karat}K` : ''}`.trim());
-                const offer = typeof item.offer === 'number' ? item.offer : parseFloat(item.offer) || 0;
-                const meltValue = getItemMeltOrResaleValue(item);
-                const profitValue = getItemProfitValue(item, meltValue, offer);
-                const profitClass = profitValue < 0 ? 'profit-negative' : 'profit-positive';
-                const actions = status === 'confirmed'
+        } else {
+            const isLocked = status === 'confirmed';
+            const rowsHtml = items.map((item, index) => {
+                if (!item.id) {
+                    item.id = `buy-item-${Date.now()}-${index}`;
+                }
+                item.id = String(item.id);
+                const itemIdAttr = escapeHtmlAttr(item.id);
+                const selectedCategory = item.category || '';
+                const description = item.description || '';
+                const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+                const offer = typeof item.offer === 'number' ? item.offer : parseFloat(item.offer) || '';
+                const categoryOptions = ['<option value="">Select category</option>']
+                    .concat(BUY_SHEET_CATEGORIES.map(category => {
+                        const selected = category === selectedCategory ? 'selected' : '';
+                        return `<option value="${escapeHtmlAttr(category)}" ${selected}>${escapeHtml(category)}</option>`;
+                    }))
+                    .join('');
+                const actions = isLocked
                     ? '<span class="text-muted">Locked</span>'
-                    : `<button class="btn-secondary btn-sm" onclick="removeBuySheetItem(${item.id})">Remove</button>`;
+                    : `<button type="button" class="btn-secondary btn-sm buy-sheet-remove-btn" data-item-id="${itemIdAttr}">Remove</button>`;
 
                 return `
-                    <tr class="buy-sheet-row ${status === 'confirmed' ? 'locked' : ''}">
+                    <tr class="buy-sheet-row ${isLocked ? 'locked' : ''}" data-item-id="${itemIdAttr}">
                         <td>${index + 1}</td>
-                        <td>${escapeHtml(category)}</td>
-                        <td>${escapeHtml(description || '—')}</td>
-                        <td>${formatCurrency(offer)}</td>
-                        <td>${formatCurrency(meltValue)}</td>
-                        <td class="${profitClass}">${formatCurrency(profitValue)}</td>
+                        <td>
+                            <select class="form-control buy-sheet-field" data-field="category" data-item-id="${itemIdAttr}">
+                                ${categoryOptions}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" class="form-control buy-sheet-field" data-field="description" data-item-id="${itemIdAttr}" placeholder="Item description">
+                        </td>
+                        <td>
+                            <input type="number" class="form-control buy-sheet-field" data-field="quantity" data-item-id="${itemIdAttr}" min="1" step="1">
+                        </td>
+                        <td>
+                            <input type="number" class="form-control buy-sheet-field" data-field="offer" data-item-id="${itemIdAttr}" min="0" step="0.01" placeholder="0.00">
+                        </td>
                         <td>${actions}</td>
                     </tr>
                 `;
             }).join('');
+
+            tableBody.innerHTML = rowsHtml;
+
+            tableBody.querySelectorAll('.buy-sheet-field').forEach(field => {
+                const itemId = field.dataset.itemId;
+                const fieldName = field.dataset.field;
+                const item = currentBuySheet.items.find(entry => String(entry.id) === String(itemId));
+                if (!item) return;
+
+                field.disabled = isLocked;
+                if (fieldName === 'category') {
+                    field.value = item.category || '';
+                    field.addEventListener('change', buySheetFieldListener);
+                } else if (fieldName === 'description') {
+                    field.value = item.description || '';
+                    field.addEventListener('input', buySheetFieldListener);
+                    field.addEventListener('change', buySheetFieldListener);
+                } else if (fieldName === 'quantity') {
+                    const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+                    field.value = qty;
+                    field.addEventListener('input', buySheetFieldListener);
+                    field.addEventListener('change', buySheetFieldListener);
+                } else if (fieldName === 'offer') {
+                    const offerValue = typeof item.offer === 'number' ? item.offer : parseFloat(item.offer);
+                    field.value = !isNaN(offerValue) ? offerValue : '';
+                    field.addEventListener('input', buySheetFieldListener);
+                    field.addEventListener('change', buySheetFieldListener);
+                }
+            });
+
+            tableBody.querySelectorAll('.buy-sheet-remove-btn').forEach(button => {
+                const itemId = button.dataset.itemId;
+                button.disabled = isLocked;
+                button.addEventListener('click', () => removeBuySheetItem(itemId));
+            });
         }
     } else {
         // Legacy fallback (older markup)
@@ -3894,68 +3946,36 @@ function renderBuySheet() {
     }
 }
 
-function getItemMeltOrResaleValue(item) {
-    const fields = ['fullMelt', 'meltValue', 'resaleValue', 'referenceValue', 'customValue', 'valuation'];
-    for (const field of fields) {
-        const value = item && typeof item[field] === 'number' ? item[field] : parseFloat(item?.[field] ?? '');
-        if (!isNaN(value)) {
-            return value;
-        }
-    }
-    return 0;
-}
-
-function getItemProfitValue(item, meltValue, offerValue) {
-    if (item && typeof item.profit === 'number' && !isNaN(item.profit)) {
-        return item.profit;
-    }
-    const offer = typeof offerValue === 'number' && !isNaN(offerValue) ? offerValue : 0;
-    const melt = typeof meltValue === 'number' && !isNaN(meltValue) ? meltValue : 0;
-    return melt - offer;
-}
-
 function updateBuySheetTotals() {
     const items = Array.isArray(currentBuySheet.items) ? currentBuySheet.items : [];
     const totals = items.reduce((acc, item) => {
         const offer = typeof item.offer === 'number' ? item.offer : parseFloat(item.offer) || 0;
-        const melt = getItemMeltOrResaleValue(item);
-        const profit = getItemProfitValue(item, melt, offer);
+        const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
         acc.offer += offer;
-        acc.melt += melt;
-        acc.profit += profit;
+        acc.items += quantity;
         return acc;
-    }, { offer: 0, melt: 0, profit: 0 });
-
-    const meltEl = document.getElementById('buy-sheet-total-melt');
-    if (meltEl) {
-        meltEl.textContent = formatCurrency(totals.melt);
-    }
+    }, { offer: 0, items: 0 });
 
     const offerEl = document.getElementById('buy-sheet-total-offer');
     if (offerEl) {
         offerEl.textContent = formatCurrency(totals.offer);
     }
 
-    const profitEl = document.getElementById('buy-sheet-total-profit');
-    if (profitEl) {
-        profitEl.textContent = formatCurrency(totals.profit);
-        profitEl.classList.remove('profit-negative', 'profit-positive');
-        if (totals.profit < 0) {
-            profitEl.classList.add('profit-negative');
-        } else if (totals.profit > 0) {
-            profitEl.classList.add('profit-positive');
-        }
+    const totalItemsEl = document.getElementById('buy-sheet-total-items');
+    if (totalItemsEl) {
+        totalItemsEl.textContent = totals.items;
     }
 }
 
 function removeBuySheetItem(itemId) {
-    currentBuySheet.items = currentBuySheet.items.filter(item => item.id !== itemId);
+    currentBuySheet.items = currentBuySheet.items.filter(item => String(item.id) !== String(itemId));
     renderBuySheet();
     saveBuySheet();
 }
 
 // Add Item to Buy Sheet Directly
-function openAddItemToSheetModal() {
+function openAddItemToSheetModal(event) {
+    if (event) event.preventDefault();
     if (!currentEvent) {
         alert('Please select or create an event first');
         return;
@@ -3965,83 +3985,79 @@ function openAddItemToSheetModal() {
         alert('Cannot add items to a confirmed buy sheet. Please cancel it first.');
         return;
     }
-    const modal = document.getElementById('add-item-to-sheet-modal');
-    if (!modal) {
-        console.error('Modal not found: add-item-to-sheet-modal');
-        alert('Error: Modal not found. Please refresh the page.');
-        return;
-    }
-    modal.classList.add('active');
-}
 
-function addItemToBuySheet(e) {
-    e.preventDefault();
-    ensureBuySheet();
-    
-    if (currentBuySheet.status === 'confirmed') {
-        alert('Cannot add items to a confirmed buy sheet. Please cancel it first.');
-        return;
-    }
-
-    // Get form values (for non-metal items)
-    const category = document.getElementById('sheet-item-category').value;
-    const description = document.getElementById('sheet-item-description').value;
-    const offerValue = document.getElementById('sheet-item-offer').value;
-    const offer = parseFloat(offerValue);
-
-    // Validate fields
-    if (!category || category === '') {
-        alert('Please select a category');
-        return;
-    }
-
-    if (!description || description.trim() === '') {
-        alert('Please enter an item description');
-        return;
-    }
-
-    if (!offerValue || isNaN(offer) || offer <= 0) {
-        alert('Please enter a valid offer price');
-        return;
-    }
-
-    // Ensure currentBuySheet.items exists
-    if (!currentBuySheet.items) {
-        currentBuySheet.items = [];
-    }
-
-    // Get quantity
-    const quantityValue = document.getElementById('sheet-item-quantity').value;
-    const quantity = parseInt(quantityValue) || 1;
-
-    // Create item (non-metal item - no calculations needed)
-    const item = {
+    const newItem = {
         id: Date.now(),
-        category: category,
-        description: description.trim(),
-        quantity: quantity,
-        metal: 'N/A',
-        karat: 'N/A',
+        category: '',
+        description: '',
+        quantity: 1,
+        offer: 0,
+        metal: null,
+        karat: null,
         weight: 0,
         marketPrice: 0,
         offerPct: 0,
-        fullMelt: 0, // No melt value for non-metal items
-        offer: offer,
-        profit: 0, // No profit calculation for non-metal items
+        fullMelt: 0,
+        profit: 0,
         datePurchased: new Date().toISOString().split('T')[0],
-        isNonMetal: true // Flag to identify non-metal items
+        isNonMetal: true
     };
 
-    // Add to buy sheet
-    currentBuySheet.items.push(item);
+    currentBuySheet.items = Array.isArray(currentBuySheet.items) ? currentBuySheet.items : [];
+    currentBuySheet.items.push(newItem);
     renderBuySheet();
     saveBuySheet();
-    closeModals();
-    
-    // Reset form
-    document.getElementById('add-item-to-sheet-form').reset();
-    
-    alert('Item added to buy sheet!');
+
+    requestAnimationFrame(() => {
+        const descriptionInput = document.querySelector(`.buy-sheet-row[data-item-id="${newItem.id}"] input[data-field="description"]`);
+        if (descriptionInput) {
+            descriptionInput.focus();
+        }
+    });
+}
+
+function buySheetFieldListener(event) {
+    const target = event.currentTarget || event.target;
+    if (!target) return;
+    const itemId = target.dataset.itemId;
+    const field = target.dataset.field;
+    if (!itemId || !field) return;
+    handleBuySheetInput(itemId, field, target);
+}
+
+function handleBuySheetInput(itemId, field, element) {
+    ensureBuySheet();
+    const items = Array.isArray(currentBuySheet.items) ? currentBuySheet.items : [];
+    const item = items.find(entry => String(entry.id) === String(itemId));
+    if (!item || !element) return;
+
+    switch (field) {
+        case 'category': {
+            item.category = element.value;
+            break;
+        }
+        case 'description': {
+            item.description = element.value;
+            break;
+        }
+        case 'quantity': {
+            const qty = Math.max(1, parseInt(element.value, 10) || 1);
+            item.quantity = qty;
+            element.value = qty;
+            break;
+        }
+        case 'offer': {
+            const offer = parseFloat(element.value);
+            item.offer = !isNaN(offer) && offer >= 0 ? offer : 0;
+            element.value = item.offer || '';
+            break;
+        }
+        default:
+            break;
+    }
+
+    saveBuySheet();
+    updateBuySheetTotals();
 }
 async function confirmBuySheet() {
     ensureBuySheet();
@@ -12609,6 +12625,10 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeHtmlAttr(text) {
+    return escapeHtml(text ?? '');
 }
 // Load appointments for route planner
 async function loadAppointmentsForRoute() {

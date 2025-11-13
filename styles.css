@@ -1,3 +1,74 @@
+.buy-sheet-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 999px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
+    background: linear-gradient(135deg, #f5f5f5 0%, #e9eef5 100%);
+    color: #1f2937;
+    letter-spacing: 0.01em;
+}
+
+.buy-sheet-action-btn .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: rgba(15, 118, 110, 0.12);
+    color: #0f766e;
+    font-size: 0.95rem;
+}
+
+.buy-sheet-action-btn.add {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: #fff;
+    box-shadow: 0 12px 25px rgba(37, 99, 235, 0.25);
+}
+
+.buy-sheet-action-btn.add .icon {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-weight: 500;
+}
+
+.buy-sheet-action-btn.scrap {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    color: #fff;
+    box-shadow: 0 12px 24px rgba(234, 88, 12, 0.25);
+}
+
+.buy-sheet-action-btn.scrap .icon {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+
+.buy-sheet-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.buy-sheet-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}
+
+.buy-sheet-action-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+}
+
+.buy-sheet-action-btn:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.35);
+    outline-offset: 3px;
+}
 /* ============================================
    MODERN DASHBOARD-STYLE REDESIGN
    ============================================ */
