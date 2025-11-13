@@ -3154,28 +3154,7 @@ function setupEventListeners() {
     });
     const addItemInlineBtn = document.getElementById('buy-sheet-add-inline');
     if (addItemInlineBtn) {
-        const inlineHandler = typeof handleBuySheetAddItem === 'function' ? handleBuySheetAddItem : openAddItemToSheetModal;
-        addItemInlineBtn.addEventListener('click', (event) => {
-            if (typeof inlineHandler === 'function') {
-                inlineHandler(event);
-            }
-        });
-    }
-    const addItemModalBtn = document.getElementById('add-item-to-sheet-btn');
-    if (addItemModalBtn) {
-        addItemModalBtn.addEventListener('click', openAddItemToSheetModal);
-    }
-    const addItemForm = document.getElementById('add-item-to-sheet-form');
-    if (addItemForm) {
-        addItemForm.addEventListener('submit', addItemToBuySheet);
-    }
-    const buySheetModalCancel = document.getElementById('buy-sheet-modal-cancel');
-    if (buySheetModalCancel) {
-        buySheetModalCancel.addEventListener('click', closeModals);
-    }
-    const buySheetModalClose = document.getElementById('buy-sheet-modal-close');
-    if (buySheetModalClose) {
-        buySheetModalClose.addEventListener('click', closeModals);
+        addItemInlineBtn.addEventListener('click', openAddItemToSheetModal);
     }
 
     // Event Management
@@ -3813,7 +3792,7 @@ function renderBuySheet() {
         if (items.length === 0) {
             tableBody.innerHTML = `
                 <tr class="empty-row">
-                    <td colspan="7">
+                    <td colspan="6">
                         <div class="empty-message">
                             <p>No items yet. Click “Add Item” to get started.</p>
                         </div>
@@ -3825,9 +3804,9 @@ function renderBuySheet() {
                 const category = item.category || (item.isNonMetal ? 'Item' : 'Metal');
                 const description = item.description || (item.isNonMetal ? '' : `${item.metal || ''} ${item.karat ? `${item.karat}K` : ''}`.trim());
                 const offer = typeof item.offer === 'number' ? item.offer : parseFloat(item.offer) || 0;
+            const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
                 const meltValue = getItemMeltOrResaleValue(item);
                 const profitValue = getItemProfitValue(item, meltValue, offer);
-                const profitClass = profitValue < 0 ? 'profit-negative' : 'profit-positive';
                 const actions = status === 'confirmed'
                     ? '<span class="text-muted">Locked</span>'
                     : `<button class="btn-secondary btn-sm" onclick="removeBuySheetItem(${item.id})">Remove</button>`;
@@ -3837,9 +3816,8 @@ function renderBuySheet() {
                         <td>${index + 1}</td>
                         <td>${escapeHtml(category)}</td>
                         <td>${escapeHtml(description || '—')}</td>
+                    <td>${quantity}</td>
                         <td>${formatCurrency(offer)}</td>
-                        <td>${formatCurrency(meltValue)}</td>
-                        <td class="${profitClass}">${formatCurrency(profitValue)}</td>
                         <td>${actions}</td>
                     </tr>
                 `;
@@ -3944,6 +3922,15 @@ function updateBuySheetTotals() {
         offerEl.textContent = formatCurrency(totals.offer);
     }
 
+    const totalItemsEl = document.getElementById('buy-sheet-total-items');
+    if (totalItemsEl) {
+        const totalItemsCount = items.reduce((sum, item) => {
+            const qty = parseInt(item.quantity, 10);
+            return sum + (isNaN(qty) ? 1 : Math.max(1, qty));
+        }, 0);
+        totalItemsEl.textContent = totalItemsCount;
+    }
+
     const profitEl = document.getElementById('buy-sheet-total-profit');
     if (profitEl) {
         profitEl.textContent = formatCurrency(totals.profit);
@@ -3963,7 +3950,8 @@ function removeBuySheetItem(itemId) {
 }
 
 // Add Item to Buy Sheet Directly
-function openAddItemToSheetModal() {
+function openAddItemToSheetModal(event) {
+    if (event) event.preventDefault();
     if (!currentEvent) {
         alert('Please select or create an event first');
         return;
@@ -3973,83 +3961,154 @@ function openAddItemToSheetModal() {
         alert('Cannot add items to a confirmed buy sheet. Please cancel it first.');
         return;
     }
-    const modal = document.getElementById('add-item-to-sheet-modal');
-    if (!modal) {
-        console.error('Modal not found: add-item-to-sheet-modal');
-        alert('Error: Modal not found. Please refresh the page.');
+
+    renderBuySheet();
+
+    const tableBody = document.getElementById('buy-sheet-table-body');
+    if (!tableBody) {
+        console.error('Unable to locate buy sheet table body.');
         return;
     }
-    modal.classList.add('active');
+
+    const existingInlineRow = tableBody.querySelector('.buy-sheet-inline-row');
+    if (existingInlineRow) {
+        const firstField = existingInlineRow.querySelector('input, select');
+        if (firstField) firstField.focus();
+        return;
+    }
+
+    if (tableBody.querySelector('.empty-row')) {
+        tableBody.innerHTML = '';
+    }
+
+    const inlineRow = createBuySheetInlineRow();
+    tableBody.appendChild(inlineRow);
+
+    const firstInput = inlineRow.querySelector('[data-field="description"]');
+    if (firstInput) firstInput.focus();
 }
 
-function addItemToBuySheet(e) {
-    e.preventDefault();
-    ensureBuySheet();
-    
-    if (currentBuySheet.status === 'confirmed') {
-        alert('Cannot add items to a confirmed buy sheet. Please cancel it first.');
+const BUY_SHEET_INLINE_CATEGORIES = [
+    'Gold Jewelry',
+    'Silver Jewelry',
+    'Platinum',
+    'Palladium',
+    'Watches',
+    'Coins',
+    'Electronics',
+    'Other'
+];
+
+function createBuySheetInlineRow() {
+    const nextIndex = (Array.isArray(currentBuySheet.items) ? currentBuySheet.items.length : 0) + 1;
+    const row = document.createElement('tr');
+    row.className = 'buy-sheet-inline-row';
+
+    const categoryOptions = BUY_SHEET_INLINE_CATEGORIES.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+
+    row.innerHTML = `
+        <td>${nextIndex}</td>
+        <td>
+            <select class="form-control" data-field="category" required>
+                <option value="">Select category</option>
+                ${categoryOptions}
+            </select>
+        </td>
+        <td>
+            <input type="text" class="form-control" data-field="description" placeholder="Item description" required>
+        </td>
+        <td>
+            <input type="number" class="form-control" data-field="quantity" min="1" step="1" value="1" required>
+        </td>
+        <td>
+            <input type="number" class="form-control" data-field="offer" min="0" step="0.01" placeholder="0.00" required>
+        </td>
+        <td>
+            <div class="inline-actions">
+                <button type="button" class="btn-primary btn-sm inline-save-btn">Save</button>
+                <button type="button" class="btn-secondary btn-sm inline-cancel-btn">Cancel</button>
+            </div>
+        </td>
+    `;
+
+    const saveBtn = row.querySelector('.inline-save-btn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => saveInlineBuySheetRow(row));
+    }
+
+    const cancelBtn = row.querySelector('.inline-cancel-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => cancelInlineBuySheetRow(row));
+    }
+
+    return row;
+}
+
+function cancelInlineBuySheetRow(row) {
+    if (row && row.parentNode) {
+        row.parentNode.removeChild(row);
+    }
+    if (!currentBuySheet.items || currentBuySheet.items.length === 0) {
+        renderBuySheet();
+    }
+}
+
+function saveInlineBuySheetRow(row) {
+    if (!row) return;
+
+    const categorySelect = row.querySelector('[data-field="category"]');
+    const descriptionInput = row.querySelector('[data-field="description"]');
+    const quantityInput = row.querySelector('[data-field="quantity"]');
+    const offerInput = row.querySelector('[data-field="offer"]');
+
+    const category = categorySelect ? categorySelect.value : '';
+    const description = descriptionInput ? descriptionInput.value.trim() : '';
+    const quantityValue = quantityInput ? quantityInput.value : '';
+    const offerValue = offerInput ? offerInput.value : '';
+
+    if (!category) {
+        alert('Please select a category');
+        if (categorySelect) categorySelect.focus();
         return;
     }
 
-    // Get form values (for non-metal items)
-    const category = document.getElementById('sheet-item-category').value;
-    const description = document.getElementById('sheet-item-description').value;
-    const offerValue = document.getElementById('sheet-item-offer').value;
+    if (!description) {
+        alert('Please enter an item description');
+        if (descriptionInput) descriptionInput.focus();
+        return;
+    }
+
+    const quantity = Math.max(1, parseInt(quantityValue, 10) || 1);
     const offer = parseFloat(offerValue);
 
-    // Validate fields
-    if (!category || category === '') {
-        alert('Please select a category');
-        return;
-    }
-
-    if (!description || description.trim() === '') {
-        alert('Please enter an item description');
-        return;
-    }
-
     if (!offerValue || isNaN(offer) || offer <= 0) {
-        alert('Please enter a valid offer price');
+        alert('Please enter a valid offer amount');
+        if (offerInput) offerInput.focus();
         return;
     }
 
-    // Ensure currentBuySheet.items exists
-    if (!currentBuySheet.items) {
-        currentBuySheet.items = [];
-    }
+    ensureBuySheet();
 
-    // Get quantity
-    const quantityValue = document.getElementById('sheet-item-quantity').value;
-    const quantity = parseInt(quantityValue) || 1;
-
-    // Create item (non-metal item - no calculations needed)
     const item = {
         id: Date.now(),
-        category: category,
-        description: description.trim(),
-        quantity: quantity,
-        metal: 'N/A',
-        karat: 'N/A',
+        category,
+        description,
+        quantity,
+        offer,
+        metal: null,
+        karat: null,
         weight: 0,
         marketPrice: 0,
         offerPct: 0,
-        fullMelt: 0, // No melt value for non-metal items
-        offer: offer,
-        profit: 0, // No profit calculation for non-metal items
+        fullMelt: 0,
+        profit: 0,
         datePurchased: new Date().toISOString().split('T')[0],
-        isNonMetal: true // Flag to identify non-metal items
+        isNonMetal: true
     };
 
-    // Add to buy sheet
     currentBuySheet.items.push(item);
     renderBuySheet();
     saveBuySheet();
-    closeModals();
-    
-    // Reset form
-    document.getElementById('add-item-to-sheet-form').reset();
-    
-    alert('Item added to buy sheet!');
 }
 async function confirmBuySheet() {
     ensureBuySheet();
@@ -9845,7 +9904,7 @@ async function fetchCompetitionCount(cityName, stateCode) {
         const placesProxy = getWindowConfig('DESERT_EXCHANGE_PLACES_PROXY', DEFAULT_YAHOO_FINANCE_PROXY);
         const requestUrl1 = buildUrlWithProxy(url1, placesProxy);
         const requestUrl2 = buildUrlWithProxy(url2, placesProxy);
-
+        
         const [response1, response2] = await Promise.all([
             fetch(requestUrl1, {
                 cache: 'no-store',
